@@ -8,6 +8,7 @@ import os
 from datetime import timedelta
 from pathlib import Path
 
+import dj_database_url
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -82,8 +83,11 @@ DATABASES = {
     }
 }
 
-if os.environ.get('IS_RENDER') == 'True':
-    DATABASES['default']['NAME'] = '/data/db.sqlite3'
+if 'DATABASE_URL' in os.environ:
+    DATABASES['default'] = dj_database_url.config(
+        conn_max_age=600,
+        conn_health_checks=True,
+    )
 
 Q_CLUSTER = {
     'name': 'BugTrackerQ',
