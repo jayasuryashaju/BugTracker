@@ -106,7 +106,9 @@ const Layout = ({ children }) => {
       const token = localStorage.getItem('access_token') || localStorage.getItem('token');
       if (!token) return;
 
-      const wsUrl = `ws://localhost:8000/ws/notifications/?token=${token}`;
+      const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+      const wsBaseUrl = baseUrl.replace(/^http/, 'ws');
+      const wsUrl = `${wsBaseUrl}/ws/notifications/?token=${token}`;
       ws = new WebSocket(wsUrl);
 
       ws.onmessage = (event) => {

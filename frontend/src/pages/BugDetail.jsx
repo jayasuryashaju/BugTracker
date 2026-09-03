@@ -363,7 +363,8 @@ const BugDetail = () => {
               <div className="card__body">
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
                   {bug.attachments.map(att => {
-                    const fileUrl = att.file.startsWith('http') ? att.file : `http://localhost:8000${att.file}`;
+                    const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+                    const fileUrl = att.file.startsWith('http') ? att.file : `${baseUrl}${att.file}`;
                     const fileName = att.file.split('/').pop();
 
                     if (isImage(fileName)) {
