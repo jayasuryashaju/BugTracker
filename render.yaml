@@ -27,7 +27,7 @@ services:
     env: static
     rootDir: frontend
     buildCommand: "npm install && npm run build"
-    publishPath: dist
+    staticPublishPath: dist
     envVars:
       - key: NODE_VERSION
         value: 20.x
@@ -37,4 +37,4 @@ services:
     env: static
     rootDir: landing
     buildCommand: ""
-    publishPath: .
+    staticPublishPath: .
