@@ -17,7 +17,7 @@ services:
           name: bugtracker-db
           property: connectionString
       - key: PYTHON_VERSION
-        value: 3.11.0
+        value: 3.13.0
       - key: DJANGO_SECRET_KEY
         generateValue: true
       - key: DJANGO_DEBUG
