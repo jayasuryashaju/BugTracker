@@ -44,6 +44,10 @@ services:
         value: 20.x
       - key: VITE_API_URL
         value: "https://bugtracker-backend-tsst.onrender.com"
+      - key: VITE_MSAL_CLIENT_ID
+        value: "4039da3a-4db7-4b5e-8ad9-75136d2b4bba"
+      - key: VITE_MSAL_TENANT_ID
+        value: "4721bfaf-91c8-464e-86e3-9369ca224b6a"
 
   - type: web
     name: bugtracker-landing
