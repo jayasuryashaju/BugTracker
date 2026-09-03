@@ -88,7 +88,14 @@ DATABASES = {
     }
 }
 
-if 'DATABASE_URL' in os.environ:
+if os.environ.get('IS_RENDER') == 'True':
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.sqlite3',
+            'NAME': '/data/db.sqlite3',
+        }
+    }
+elif 'DATABASE_URL' in os.environ:
     DATABASES['default'] = dj_database_url.config(
         conn_max_age=600,
         conn_health_checks=True,
