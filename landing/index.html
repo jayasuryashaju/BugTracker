@@ -1,0 +1,825 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="BugTracker Pro — The modern, real-time issue tracking platform built for high-velocity engineering teams. Track bugs, manage projects, and ship faster." />
+  <meta name="theme-color" content="#6366f1" />
+  <title>BugTracker Pro — Modern Issue Tracking for Engineering Teams</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; font-size: 16px; }
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      background: #09090b;
+      color: #f8fafc;
+      -webkit-font-smoothing: antialiased;
+      overflow-x: hidden;
+      line-height: 1.6;
+    }
+    a { color: inherit; text-decoration: none; }
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.12); border-radius: 99px; }
+
+    :root {
+      --accent: #6366f1;
+      --surface: #111113;
+      --elevated: #18181c;
+      --border: rgba(255,255,255,0.07);
+      --border-bright: rgba(255,255,255,0.14);
+    }
+
+    /* NAV */
+    nav {
+      position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 0 48px; height: 64px;
+      background: rgba(9,9,11,0.85);
+      backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
+      border-bottom: 1px solid var(--border);
+    }
+    .nav-logo { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 1rem; letter-spacing: -0.02em; }
+    .nav-logo-icon {
+      width: 32px; height: 32px;
+      background: linear-gradient(135deg, #6366f1, #4338ca);
+      border-radius: 8px; display: flex; align-items: center; justify-content: center;
+    }
+    .nav-logo-badge {
+      font-size: 0.55rem; font-weight: 700; padding: 1.5px 5px;
+      background: #4f46e5; color: #fff; border-radius: 4px;
+      letter-spacing: 0.06em; text-transform: uppercase;
+    }
+    .nav-links { display: flex; align-items: center; gap: 32px; list-style: none; }
+    .nav-links a { font-size: 0.88rem; font-weight: 500; color: #94a3b8; transition: color 0.2s; }
+    .nav-links a:hover { color: #f8fafc; }
+    .nav-cta { display: flex; align-items: center; gap: 12px; }
+    .btn-nav {
+      padding: 9px 20px; border-radius: 10px; font-size: 0.85rem; font-weight: 600;
+      cursor: pointer; font-family: inherit; border: none; transition: all 0.2s ease;
+    }
+    .btn-nav--ghost { background: transparent; color: #94a3b8; }
+    .btn-nav--ghost:hover { color: #f8fafc; }
+    .btn-nav--primary { background: #6366f1; color: #fff; box-shadow: 0 2px 12px rgba(99,102,241,0.4); }
+    .btn-nav--primary:hover { background: #818cf8; transform: translateY(-1px); }
+    .hamburger { display: none; flex-direction: column; gap: 5px; cursor: pointer; padding: 4px; background: none; border: none; }
+    .hamburger span { display: block; width: 22px; height: 2px; background: #f8fafc; border-radius: 2px; transition: all 0.3s; }
+
+    /* HERO */
+    .hero {
+      min-height: 100vh; display: flex; align-items: center; justify-content: center;
+      text-align: center; padding: 120px 24px 80px; position: relative; overflow: hidden;
+    }
+    .hero-bg {
+      position: absolute; inset: 0;
+      background:
+        radial-gradient(ellipse 80% 60% at 50% -10%, rgba(99,102,241,0.18) 0%, transparent 70%),
+        radial-gradient(ellipse 60% 40% at 20% 80%, rgba(59,130,246,0.08) 0%, transparent 60%),
+        radial-gradient(ellipse 40% 30% at 80% 60%, rgba(168,85,247,0.07) 0%, transparent 60%);
+    }
+    .hero-grid {
+      position: absolute; inset: 0;
+      background-image: linear-gradient(rgba(255,255,255,0.025) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.025) 1px, transparent 1px);
+      background-size: 60px 60px;
+      mask-image: radial-gradient(ellipse 80% 70% at 50% 50%, black, transparent);
+    }
+    .hero-content { position: relative; z-index: 1; max-width: 860px; margin: 0 auto; }
+    .hero-badge {
+      display: inline-flex; align-items: center; gap: 8px;
+      padding: 6px 16px; background: rgba(99,102,241,0.12); border: 1px solid rgba(99,102,241,0.3);
+      border-radius: 99px; font-size: 0.8rem; font-weight: 600; color: #a5b4fc; margin-bottom: 28px;
+    }
+    .hero-badge-dot { width: 7px; height: 7px; border-radius: 50%; background: #6366f1; box-shadow: 0 0 8px #6366f1; animation: pulse 2s infinite; }
+    @keyframes pulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:0.6;transform:scale(0.85)} }
+    .hero h1 {
+      font-size: clamp(2.4rem, 6vw, 4.2rem); font-weight: 900; letter-spacing: -0.04em;
+      line-height: 1.08; margin-bottom: 24px; color: #f8fafc;
+    }
+    .gradient-text {
+      background: linear-gradient(135deg, #6366f1 0%, #a78bfa 50%, #38bdf8 100%);
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+    }
+    .hero-sub { font-size: clamp(1rem, 2vw, 1.2rem); color: #94a3b8; max-width: 600px; margin: 0 auto 40px; line-height: 1.7; }
+    .hero-actions { display: flex; align-items: center; justify-content: center; gap: 16px; flex-wrap: wrap; }
+    .btn-hero-primary {
+      display: inline-flex; align-items: center; gap: 8px; padding: 14px 28px;
+      background: #6366f1; color: #fff; border-radius: 12px; font-weight: 700; font-size: 0.95rem;
+      border: none; cursor: pointer; font-family: inherit;
+      box-shadow: 0 4px 24px rgba(99,102,241,0.5); transition: all 0.2s ease;
+    }
+    .btn-hero-primary:hover { background: #818cf8; transform: translateY(-2px); }
+    .btn-hero-secondary {
+      display: inline-flex; align-items: center; gap: 8px; padding: 14px 28px;
+      background: transparent; color: #cbd5e1; border-radius: 12px; font-weight: 600; font-size: 0.95rem;
+      border: 1px solid rgba(255,255,255,0.12); cursor: pointer; font-family: inherit; transition: all 0.2s ease;
+    }
+    .btn-hero-secondary:hover { background: rgba(255,255,255,0.06); color: #f8fafc; }
+
+    /* MOCKUP */
+    .hero-mockup { margin-top: 72px; position: relative; max-width: 960px; margin-left: auto; margin-right: auto; }
+    .hero-mockup::before {
+      content: ''; position: absolute; inset: -1px; border-radius: 20px;
+      background: linear-gradient(135deg, rgba(99,102,241,0.4), rgba(59,130,246,0.2), rgba(168,85,247,0.2)); z-index: 0;
+    }
+    .hero-mockup-inner { position: relative; z-index: 1; background: #111113; border-radius: 19px; overflow: hidden; box-shadow: 0 40px 80px rgba(0,0,0,0.8); }
+    .mockup-bar { height: 38px; background: #18181c; border-bottom: 1px solid rgba(255,255,255,0.06); display: flex; align-items: center; padding: 0 16px; gap: 8px; }
+    .mockup-dot { width: 11px; height: 11px; border-radius: 50%; }
+    .mockup-url { flex: 1; height: 22px; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.06); border-radius: 6px; margin: 0 12px; display: flex; align-items: center; padding: 0 10px; font-size: 0.72rem; color: #64748b; }
+    .mockup-dashboard { display: grid; grid-template-columns: 200px 1fr; height: 400px; }
+    .mockup-sidebar { background: #111113; border-right: 1px solid rgba(255,255,255,0.06); padding: 16px 12px; }
+    .mockup-brand { display: flex; align-items: center; gap: 8px; padding: 8px 10px; margin-bottom: 16px; }
+    .mockup-brand-icon { width: 26px; height: 26px; background: linear-gradient(135deg, #6366f1, #4338ca); border-radius: 6px; }
+    .mockup-brand-text { width: 70px; height: 10px; background: rgba(255,255,255,0.15); border-radius: 4px; }
+    .mockup-nav-item { height: 34px; border-radius: 8px; margin-bottom: 3px; display: flex; align-items: center; padding: 0 10px; gap: 8px; }
+    .mockup-nav-item.active { background: rgba(99,102,241,0.15); }
+    .mockup-nav-icon { width: 14px; height: 14px; border-radius: 3px; background: rgba(255,255,255,0.1); }
+    .mockup-nav-icon.active { background: rgba(99,102,241,0.8); }
+    .mockup-nav-label { height: 8px; border-radius: 4px; background: rgba(255,255,255,0.08); flex: 1; }
+    .mockup-nav-label.active { background: rgba(99,102,241,0.5); }
+    .mockup-main { background: #09090b; padding: 20px; overflow: hidden; }
+    .mockup-stats { display: grid; grid-template-columns: repeat(4,1fr); gap: 10px; margin-bottom: 16px; }
+    .mockup-stat { background: #111113; border: 1px solid rgba(255,255,255,0.06); border-radius: 10px; padding: 12px; }
+    .mockup-stat-val { height: 18px; width: 36px; background: rgba(255,255,255,0.2); border-radius: 4px; margin-bottom: 6px; }
+    .mockup-stat-label { height: 7px; background: rgba(255,255,255,0.07); border-radius: 4px; width: 70%; }
+    .mockup-table { background: #111113; border: 1px solid rgba(255,255,255,0.06); border-radius: 10px; overflow: hidden; }
+    .mockup-table-header { display: grid; grid-template-columns: 2fr 1fr 1fr 1fr; padding: 8px 14px; background: rgba(255,255,255,0.03); gap: 8px; }
+    .mockup-col-head { height: 7px; background: rgba(255,255,255,0.08); border-radius: 3px; }
+    .mockup-row { display: grid; grid-template-columns: 2fr 1fr 1fr 1fr; padding: 10px 14px; border-top: 1px solid rgba(255,255,255,0.04); gap: 8px; align-items: center; }
+    .mockup-row-title { height: 8px; background: rgba(255,255,255,0.12); border-radius: 3px; }
+    .mockup-badge { height: 18px; border-radius: 99px; width: 60px; }
+    .badge-open { background: rgba(59,130,246,0.2); border: 1px solid rgba(59,130,246,0.3); }
+    .badge-progress { background: rgba(245,158,11,0.2); border: 1px solid rgba(245,158,11,0.3); }
+    .badge-resolved { background: rgba(16,185,129,0.2); border: 1px solid rgba(16,185,129,0.3); }
+    .badge-critical { background: rgba(239,68,68,0.15); border: 1px solid rgba(239,68,68,0.3); }
+    .badge-high { background: rgba(249,115,22,0.15); border: 1px solid rgba(249,115,22,0.3); }
+    .badge-medium { background: rgba(245,158,11,0.15); border: 1px solid rgba(245,158,11,0.3); }
+    .mockup-avatar-row { display: flex; align-items: center; gap: 6px; }
+    .mockup-avatar { width: 18px; height: 18px; border-radius: 4px; background: linear-gradient(135deg,#6366f1,#a78bfa); }
+    .mockup-name { height: 7px; width: 48px; background: rgba(255,255,255,0.1); border-radius: 3px; }
+
+    /* SECTIONS */
+    section { padding: 100px 24px; }
+    .container { max-width: 1160px; margin: 0 auto; }
+    .section-label { display: inline-flex; align-items: center; gap: 8px; font-size: 0.75rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; color: #6366f1; margin-bottom: 16px; }
+    .section-title { font-size: clamp(1.8rem, 4vw, 2.8rem); font-weight: 800; letter-spacing: -0.03em; line-height: 1.15; color: #f8fafc; margin-bottom: 16px; }
+    .section-sub { font-size: 1.05rem; color: #94a3b8; max-width: 540px; line-height: 1.7; }
+
+    /* PROOF STRIP */
+    .proof-strip { background: var(--surface); border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); padding: 28px 24px; }
+    .proof-inner { max-width: 1160px; margin: 0 auto; display: flex; align-items: center; justify-content: center; gap: 64px; flex-wrap: wrap; }
+    .proof-num { font-size: 2rem; font-weight: 800; letter-spacing: -0.04em; background: linear-gradient(135deg,#6366f1,#a5b4fc); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
+    .proof-label { font-size: 0.82rem; color: #64748b; margin-top: 4px; font-weight: 500; }
+
+    /* FEATURES GRID */
+    .features-grid {
+      display: grid; grid-template-columns: repeat(3, 1fr);
+      gap: 1px; background: var(--border); border: 1px solid var(--border);
+      border-radius: 20px; overflow: hidden; margin-top: 64px;
+    }
+    .feature-card { background: #0d0d10; padding: 36px 32px; transition: background 0.2s; }
+    .feature-card:hover { background: #111115; }
+    .feature-icon { width: 48px; height: 48px; border-radius: 12px; display: flex; align-items: center; justify-content: center; margin-bottom: 20px; font-size: 22px; }
+    .feature-title { font-size: 1.05rem; font-weight: 700; color: #f1f5f9; margin-bottom: 10px; letter-spacing: -0.02em; }
+    .feature-desc { font-size: 0.88rem; color: #64748b; line-height: 1.7; }
+
+    /* SPOTLIGHTS */
+    .spotlight { display: grid; grid-template-columns: 1fr 1fr; gap: 64px; align-items: center; padding: 80px 0; }
+    .spotlight.reverse { direction: rtl; }
+    .spotlight.reverse > * { direction: ltr; }
+    .spotlight-visual { background: var(--elevated); border: 1px solid var(--border); border-radius: 20px; overflow: hidden; aspect-ratio: 16/10; position: relative; }
+    .spotlight-tag { display: inline-flex; align-items: center; gap: 6px; background: rgba(99,102,241,0.1); border: 1px solid rgba(99,102,241,0.25); color: #a5b4fc; font-size: 0.75rem; font-weight: 600; padding: 4px 12px; border-radius: 99px; margin-bottom: 16px; }
+    .spotlight-title { font-size: clamp(1.5rem, 3vw, 2rem); font-weight: 800; letter-spacing: -0.03em; color: #f1f5f9; margin-bottom: 16px; line-height: 1.2; }
+    .spotlight-desc { color: #94a3b8; font-size: 0.95rem; line-height: 1.75; margin-bottom: 28px; }
+    .check-list { list-style: none; display: flex; flex-direction: column; gap: 10px; }
+    .check-list li { display: flex; align-items: flex-start; gap: 10px; font-size: 0.9rem; color: #94a3b8; }
+    .check-icon { width: 20px; height: 20px; border-radius: 50%; background: rgba(16,185,129,0.15); border: 1px solid rgba(16,185,129,0.3); display: flex; align-items: center; justify-content: center; flex-shrink: 0; margin-top: 1px; font-size: 0.65rem; color: #10b981; }
+
+    /* KANBAN DEMO */
+    .kanban-demo { padding: 16px; display: grid; grid-template-columns: repeat(3,1fr); gap: 10px; height: 100%; }
+    .kanban-col { border-radius: 10px; background: rgba(255,255,255,0.03); padding: 10px; display: flex; flex-direction: column; gap: 8px; }
+    .kanban-col-title { font-size: 0.7rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: #64748b; padding: 4px 6px; }
+    .kanban-card { background: #18181c; border: 1px solid rgba(255,255,255,0.06); border-radius: 8px; padding: 10px; }
+    .kanban-card-line { height: 7px; border-radius: 3px; background: rgba(255,255,255,0.1); margin-bottom: 6px; }
+    .kanban-card-line.short { width: 60%; }
+    .kanban-card-footer { display: flex; align-items: center; justify-content: space-between; margin-top: 8px; }
+    .kanban-mini-badge { height: 14px; width: 40px; border-radius: 99px; }
+    .kanban-mini-avatar { width: 16px; height: 16px; border-radius: 4px; background: linear-gradient(135deg,#6366f1,#a78bfa); }
+
+    /* COMMENTS DEMO */
+    .comments-demo { padding: 16px; display: flex; flex-direction: column; gap: 10px; }
+    .comment-block { background: #18181c; border: 1px solid rgba(255,255,255,0.06); border-radius: 10px; padding: 12px 14px; display: flex; gap: 10px; }
+    .comment-avatar { width: 28px; height: 28px; border-radius: 7px; flex-shrink: 0; }
+    .comment-content { flex: 1; }
+    .comment-author-row { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+    .comment-name { height: 8px; width: 60px; background: rgba(255,255,255,0.15); border-radius: 3px; }
+    .comment-role { height: 14px; width: 44px; border-radius: 99px; background: rgba(99,102,241,0.2); }
+    .comment-text-line { height: 7px; background: rgba(255,255,255,0.07); border-radius: 3px; margin-bottom: 5px; }
+    .comment-text-line.w80 { width: 80%; }
+    .comment-text-line.w60 { width: 60%; }
+
+    /* ROLES */
+    .roles-grid { display: grid; grid-template-columns: repeat(4,1fr); gap: 16px; margin-top: 56px; }
+    .role-card { background: #0d0d10; border: 1px solid var(--border); border-radius: 16px; padding: 28px 24px; transition: all 0.2s ease; }
+    .role-card:hover { border-color: var(--border-bright); transform: translateY(-4px); box-shadow: 0 16px 32px rgba(0,0,0,0.5); }
+    .role-icon { font-size: 2rem; margin-bottom: 16px; }
+    .role-name { font-size: 1rem; font-weight: 700; color: #f1f5f9; margin-bottom: 8px; letter-spacing: -0.02em; }
+    .role-desc { font-size: 0.83rem; color: #64748b; line-height: 1.65; margin-bottom: 16px; }
+    .role-perms { display: flex; flex-direction: column; gap: 6px; }
+    .role-perm { font-size: 0.78rem; color: #94a3b8; display: flex; align-items: center; gap: 6px; }
+    .perm-dot { width: 5px; height: 5px; border-radius: 50%; background: #6366f1; flex-shrink: 0; }
+
+    /* WORKFLOW */
+    .workflow-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 80px; align-items: start; }
+    .workflow-steps { display: flex; flex-direction: column; gap: 0; position: relative; }
+    .workflow-steps::before { content: ''; position: absolute; left: 27px; top: 28px; bottom: 28px; width: 2px; background: linear-gradient(to bottom, #6366f1, rgba(99,102,241,0.1)); }
+    .workflow-step { display: flex; align-items: flex-start; gap: 28px; padding: 28px 0; position: relative; }
+    .step-num { width: 56px; height: 56px; border-radius: 50%; background: linear-gradient(135deg,#6366f1,#4338ca); display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 1.1rem; color: #fff; flex-shrink: 0; box-shadow: 0 0 0 4px rgba(99,102,241,0.15), 0 0 24px rgba(99,102,241,0.25); z-index: 1; }
+    .step-content { padding-top: 10px; }
+    .step-title { font-size: 1.1rem; font-weight: 700; color: #f1f5f9; margin-bottom: 8px; letter-spacing: -0.02em; }
+    .step-desc { font-size: 0.9rem; color: #64748b; line-height: 1.7; max-width: 520px; }
+
+    /* INTEGRATIONS */
+    .integration-logos { display: flex; align-items: center; justify-content: center; gap: 16px; flex-wrap: wrap; margin-top: 56px; }
+    .integration-pill { display: flex; align-items: center; gap: 10px; padding: 14px 20px; background: #0d0d10; border: 1px solid var(--border); border-radius: 12px; font-size: 0.88rem; font-weight: 600; color: #94a3b8; transition: all 0.2s; }
+    .integration-pill:hover { border-color: var(--border-bright); color: #f1f5f9; transform: translateY(-2px); }
+    .integration-emoji { font-size: 1.3rem; }
+
+    /* CTA */
+    .cta-section { padding: 120px 24px; text-align: center; position: relative; overflow: hidden; }
+    .cta-bg { position: absolute; inset: 0; background: radial-gradient(ellipse 70% 60% at 50% 50%, rgba(99,102,241,0.12) 0%, transparent 70%); }
+    .cta-content { position: relative; z-index: 1; }
+    .cta-title { font-size: clamp(2rem, 5vw, 3.5rem); font-weight: 900; letter-spacing: -0.04em; line-height: 1.1; margin-bottom: 20px; }
+    .cta-sub { font-size: 1.1rem; color: #94a3b8; margin-bottom: 40px; }
+    .cta-actions { display: flex; align-items: center; justify-content: center; gap: 16px; flex-wrap: wrap; }
+
+    /* FOOTER */
+    footer { background: var(--surface); border-top: 1px solid var(--border); padding: 48px 24px; }
+    .footer-inner { max-width: 1160px; margin: 0 auto; display: grid; grid-template-columns: 1.5fr 1fr 1fr 1fr; gap: 48px; }
+    .footer-brand-desc { font-size: 0.85rem; color: #64748b; margin-top: 14px; line-height: 1.65; max-width: 240px; }
+    .footer-col-title { font-size: 0.78rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: #475569; margin-bottom: 16px; }
+    .footer-links { display: flex; flex-direction: column; gap: 10px; }
+    .footer-links a { font-size: 0.85rem; color: #64748b; transition: color 0.2s; }
+    .footer-links a:hover { color: #f1f5f9; }
+    .footer-bottom { max-width: 1160px; margin: 40px auto 0; padding-top: 24px; border-top: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; }
+    .footer-copy { font-size: 0.8rem; color: #475569; }
+    .footer-badge { font-size: 0.75rem; color: #475569; display: flex; align-items: center; gap: 6px; }
+
+    /* ANIMATIONS */
+    .fade-up { opacity: 0; transform: translateY(24px); transition: opacity 0.6s ease, transform 0.6s ease; }
+    .fade-up.visible { opacity: 1; transform: translateY(0); }
+    .delay-1 { transition-delay: 0.1s; }
+    .delay-2 { transition-delay: 0.2s; }
+    .delay-3 { transition-delay: 0.3s; }
+
+    /* RESPONSIVE */
+    @media (max-width: 1024px) {
+      .features-grid { grid-template-columns: repeat(2, 1fr); }
+      .roles-grid { grid-template-columns: repeat(2, 1fr); }
+      .spotlight, .spotlight.reverse { grid-template-columns: 1fr; direction: ltr; gap: 40px; }
+      .footer-inner { grid-template-columns: 1fr 1fr; }
+      .workflow-grid { grid-template-columns: 1fr; gap: 48px; }
+      .mockup-dashboard { grid-template-columns: 160px 1fr; }
+    }
+    @media (max-width: 768px) {
+      nav { padding: 0 20px; }
+      .nav-links { display: none; }
+      .nav-cta .btn-nav--ghost { display: none; }
+      .hamburger { display: flex; }
+      nav.open .nav-links {
+        display: flex; flex-direction: column;
+        position: fixed; top: 64px; left: 0; right: 0;
+        background: rgba(9,9,11,0.98); padding: 20px;
+        border-bottom: 1px solid var(--border); gap: 4px;
+      }
+      nav.open .nav-links a { padding: 12px 16px; border-radius: 8px; display: block; }
+      .features-grid { grid-template-columns: 1fr; }
+      .roles-grid { grid-template-columns: 1fr 1fr; }
+      .proof-inner { gap: 32px; }
+      .footer-inner { grid-template-columns: 1fr; gap: 32px; }
+      .mockup-sidebar { display: none; }
+      .mockup-dashboard { grid-template-columns: 1fr; }
+      .mockup-stats { grid-template-columns: repeat(2, 1fr); }
+      section { padding: 64px 20px; }
+      .cta-section { padding: 80px 20px; }
+    }
+    @media (max-width: 480px) {
+      .hero { padding: 100px 16px 60px; }
+      .roles-grid { grid-template-columns: 1fr; }
+      .hero-actions { flex-direction: column; width: 100%; }
+      .btn-hero-primary, .btn-hero-secondary { width: 100%; justify-content: center; }
+      .kanban-demo { grid-template-columns: 1fr 1fr; }
+      .cta-actions { flex-direction: column; width: 100%; }
+      .cta-actions button { width: 100%; justify-content: center; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav id="navbar">
+  <a href="#" class="nav-logo">
+    <div class="nav-logo-icon">
+      <svg width="18" height="18" viewBox="0 0 64 64" fill="none">
+        <path d="M32 10 L48 18 L48 34 C48 44 41 52 32 56 C23 52 16 44 16 34 L16 18 Z" fill="none" stroke="#fff" stroke-width="2.5" opacity="0.9"/>
+        <circle cx="32" cy="32" r="8" fill="none" stroke="#a5b4fc" stroke-width="2"/>
+        <line x1="32" y1="22" x2="32" y2="28" stroke="#a5b4fc" stroke-width="1.8" stroke-linecap="round"/>
+        <line x1="32" y1="36" x2="32" y2="42" stroke="#a5b4fc" stroke-width="1.8" stroke-linecap="round"/>
+        <line x1="22" y1="32" x2="28" y2="32" stroke="#a5b4fc" stroke-width="1.8" stroke-linecap="round"/>
+        <line x1="36" y1="32" x2="42" y2="32" stroke="#a5b4fc" stroke-width="1.8" stroke-linecap="round"/>
+        <circle cx="32" cy="32" r="2.5" fill="#fff"/>
+      </svg>
+    </div>
+    BugTracker <span class="nav-logo-badge">Pro</span>
+  </a>
+  <ul class="nav-links" id="navLinks">
+    <li><a href="#features">Features</a></li>
+    <li><a href="#workflow">How it Works</a></li>
+    <li><a href="#roles">Team Roles</a></li>
+    <li><a href="#integrations">Integrations</a></li>
+  </ul>
+  <div class="nav-cta">
+    <button class="btn-nav btn-nav--ghost" onclick="window.location.href='http://localhost:5173/login'">Sign In</button>
+    <button class="btn-nav btn-nav--primary" onclick="window.location.href='http://localhost:5173/login'">Get Started Free</button>
+  </div>
+  <button class="hamburger" id="hamburger" onclick="toggleMenu()" aria-label="Toggle menu">
+    <span></span><span></span><span></span>
+  </button>
+</nav>
+
+<!-- HERO -->
+<section class="hero">
+  <div class="hero-bg"></div>
+  <div class="hero-grid"></div>
+  <div class="hero-content">
+    <div class="hero-badge">
+      <span class="hero-badge-dot"></span>
+      Real-time &middot; Enterprise-ready &middot; Open Architecture
+    </div>
+    <h1>Track Bugs.<br/><span class="gradient-text">Ship Faster.</span></h1>
+    <p class="hero-sub">BugTracker Pro is the modern issue tracking platform built for high-velocity engineering teams. Real-time updates, intelligent workflows, and beautiful dashboards — all in one place.</p>
+    <div class="hero-actions">
+      <button class="btn-hero-primary" onclick="window.location.href='http://localhost:5173/login'">
+        <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+        Start Tracking Now
+      </button>
+      <button class="btn-hero-secondary" onclick="document.getElementById('features').scrollIntoView({behavior:'smooth'})">
+        <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polygon points="10 8 16 12 10 16 10 8" fill="currentColor" stroke="none"/></svg>
+        Explore Features
+      </button>
+    </div>
+
+    <!-- App Mockup -->
+    <div class="hero-mockup fade-up">
+      <div class="hero-mockup-inner">
+        <div class="mockup-bar">
+          <div class="mockup-dot" style="background:#ff5f57"></div>
+          <div class="mockup-dot" style="background:#febc2e"></div>
+          <div class="mockup-dot" style="background:#28c840"></div>
+          <div class="mockup-url">app.bugtracker.pro &mdash; Dashboard</div>
+        </div>
+        <div class="mockup-dashboard">
+          <div class="mockup-sidebar">
+            <div class="mockup-brand">
+              <div class="mockup-brand-icon"></div>
+              <div class="mockup-brand-text"></div>
+            </div>
+            <div class="mockup-nav-item active"><div class="mockup-nav-icon active"></div><div class="mockup-nav-label active"></div></div>
+            <div class="mockup-nav-item"><div class="mockup-nav-icon"></div><div class="mockup-nav-label"></div></div>
+            <div class="mockup-nav-item"><div class="mockup-nav-icon"></div><div class="mockup-nav-label"></div></div>
+            <div class="mockup-nav-item"><div class="mockup-nav-icon"></div><div class="mockup-nav-label"></div></div>
+            <div class="mockup-nav-item"><div class="mockup-nav-icon"></div><div class="mockup-nav-label"></div></div>
+          </div>
+          <div class="mockup-main">
+            <div class="mockup-stats">
+              <div class="mockup-stat"><div class="mockup-stat-val" style="background:rgba(99,102,241,0.4)"></div><div class="mockup-stat-label"></div></div>
+              <div class="mockup-stat"><div class="mockup-stat-val" style="background:rgba(59,130,246,0.4)"></div><div class="mockup-stat-label"></div></div>
+              <div class="mockup-stat"><div class="mockup-stat-val" style="background:rgba(245,158,11,0.4)"></div><div class="mockup-stat-label"></div></div>
+              <div class="mockup-stat"><div class="mockup-stat-val" style="background:rgba(16,185,129,0.4)"></div><div class="mockup-stat-label"></div></div>
+            </div>
+            <div class="mockup-table">
+              <div class="mockup-table-header">
+                <div class="mockup-col-head"></div><div class="mockup-col-head"></div><div class="mockup-col-head"></div><div class="mockup-col-head"></div>
+              </div>
+              <div class="mockup-row">
+                <div class="mockup-row-title"></div>
+                <div class="mockup-badge badge-open"></div>
+                <div class="mockup-badge badge-critical"></div>
+                <div class="mockup-avatar-row"><div class="mockup-avatar"></div><div class="mockup-name"></div></div>
+              </div>
+              <div class="mockup-row">
+                <div class="mockup-row-title" style="width:70%"></div>
+                <div class="mockup-badge badge-progress"></div>
+                <div class="mockup-badge badge-high"></div>
+                <div class="mockup-avatar-row"><div class="mockup-avatar" style="background:linear-gradient(135deg,#10b981,#059669)"></div><div class="mockup-name"></div></div>
+              </div>
+              <div class="mockup-row">
+                <div class="mockup-row-title" style="width:85%"></div>
+                <div class="mockup-badge badge-resolved"></div>
+                <div class="mockup-badge badge-medium"></div>
+                <div class="mockup-avatar-row"><div class="mockup-avatar" style="background:linear-gradient(135deg,#f59e0b,#d97706)"></div><div class="mockup-name"></div></div>
+              </div>
+              <div class="mockup-row">
+                <div class="mockup-row-title" style="width:60%"></div>
+                <div class="mockup-badge badge-open"></div>
+                <div class="mockup-badge badge-critical"></div>
+                <div class="mockup-avatar-row"><div class="mockup-avatar" style="background:linear-gradient(135deg,#ef4444,#dc2626)"></div><div class="mockup-name"></div></div>
+              </div>
+              <div class="mockup-row">
+                <div class="mockup-row-title" style="width:75%"></div>
+                <div class="mockup-badge badge-progress"></div>
+                <div class="mockup-badge badge-high"></div>
+                <div class="mockup-avatar-row"><div class="mockup-avatar" style="background:linear-gradient(135deg,#a78bfa,#7c3aed)"></div><div class="mockup-name"></div></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- PROOF STRIP -->
+<div class="proof-strip">
+  <div class="proof-inner">
+    <div style="text-align:center"><div class="proof-num" id="countBugs">10K+</div><div class="proof-label">Bugs Tracked</div></div>
+    <div style="text-align:center"><div class="proof-num">5</div><div class="proof-label">Team Roles</div></div>
+    <div style="text-align:center"><div class="proof-num">Real-time</div><div class="proof-label">Live WebSocket Updates</div></div>
+    <div style="text-align:center"><div class="proof-num">100%</div><div class="proof-label">Mobile Compatible</div></div>
+    <div style="text-align:center"><div class="proof-num">&infin;</div><div class="proof-label">Projects &amp; Teams</div></div>
+  </div>
+</div>
+
+<!-- FEATURES -->
+<section id="features" style="background:#09090b">
+  <div class="container">
+    <div class="section-label"><svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: currentColor; "><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg> Everything You Need</div>
+    <h2 class="section-title fade-up">One platform.<br/>Every team workflow.</h2>
+    <p class="section-sub fade-up delay-1">From filing the first bug to shipping the fix — BugTracker Pro covers the entire lifecycle with powerful, intuitive tools.</p>
+
+    <div class="features-grid fade-up delay-2">
+      <div class="feature-card">
+        <div class="feature-icon" style="background:rgba(99,102,241,0.12)"><svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: currentColor; "><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg></div>
+        <div class="feature-title">Real-Time Bug Tracking</div>
+        <div class="feature-desc">Live updates powered by WebSockets. Every status change, comment, and assignment appears instantly across all connected devices.</div>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon" style="background:rgba(59,130,246,0.12)"><svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: currentColor; "><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg></div>
+        <div class="feature-title">Analytics Dashboard</div>
+        <div class="feature-desc">Beautiful charts showing resolution rates, priority breakdowns, bug trends over time, and team performance metrics.</div>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon" style="background:rgba(16,185,129,0.12)"><svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: currentColor; "><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="9" y1="3" x2="9" y2="21"/></svg></div>
+        <div class="feature-title">Kanban Board View</div>
+        <div class="feature-desc">Visualize your backlog with a Kanban board. Move bugs through Open &rarr; In Progress &rarr; Resolved with a single click.</div>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon" style="background:rgba(245,158,11,0.12)"><svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: currentColor; "><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg></div>
+        <div class="feature-title">Advanced Filtering</div>
+        <div class="feature-desc">Filter by status, priority, assignee, project, and tags. Save custom filter sets for one-click access. Export to CSV anytime.</div>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon" style="background:rgba(168,85,247,0.12)"><svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: currentColor; "><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></div>
+        <div class="feature-title">Rich Markdown Comments</div>
+        <div class="feature-desc">Threaded Markdown comments — code blocks, inline images, and color-coded author identity for easy visual scanning.</div>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon" style="background:rgba(239,68,68,0.12)"><svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: currentColor; "><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg></div>
+        <div class="feature-title">File Attachments</div>
+        <div class="feature-desc">Attach screenshots, screen recordings, and PDFs with drag-and-drop upload. Inline preview with lightbox viewer.</div>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon" style="background:rgba(14,165,233,0.12)"><svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: currentColor; "><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg></div>
+        <div class="feature-title">Smart Notifications</div>
+        <div class="feature-desc">Instant in-app notifications when bugs are assigned, updated, or commented on. Notification bell with unread badge and audio chime.</div>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon" style="background:rgba(6,182,212,0.12)"><svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: currentColor; "><path d="M18 3a3 3 0 0 0-3 3v12a3 3 0 0 0 3 3 3 3 0 0 0 3-3 3 3 0 0 0-3-3H6a3 3 0 0 0-3 3 3 3 0 0 0 3 3 3 3 0 0 0 3-3V6a3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3h12a3 3 0 0 0 3-3 3 3 0 0 0-3-3z"/></svg></div>
+        <div class="feature-title">Command Palette</div>
+        <div class="feature-desc">Press Ctrl+K to launch the command palette. Jump to any page, search bugs, and take actions at keyboard speed.</div>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon" style="background:rgba(20,184,166,0.12)"><svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: currentColor; "><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg></div>
+        <div class="feature-title">Bug Linking &amp; Work Logs</div>
+        <div class="feature-desc">Link related bugs together, track time spent with work logs, and maintain a full activity audit trail with timestamped history.</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- KANBAN SPOTLIGHT -->
+<section style="background:#09090b; padding:80px 24px">
+  <div class="container">
+    <div class="spotlight fade-up">
+      <div>
+        <span class="spotlight-tag"><svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: currentColor; "><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="9" y1="3" x2="9" y2="21"/></svg> Kanban Board</span>
+        <h3 class="spotlight-title">Visualize progress at a glance</h3>
+        <p class="spotlight-desc">The Kanban board gives your team instant visual clarity on what's being worked on, what's blocked, and what's done — across every project simultaneously.</p>
+        <ul class="check-list">
+          <li><span class="check-icon"><svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" style="color: currentColor; "><polyline points="20 6 9 17 4 12"/></svg></span> Four swimlanes: Open, In Progress, Resolved, Closed</li>
+          <li><span class="check-icon"><svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" style="color: currentColor; "><polyline points="20 6 9 17 4 12"/></svg></span> Priority color-coding on every card</li>
+          <li><span class="check-icon"><svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" style="color: currentColor; "><polyline points="20 6 9 17 4 12"/></svg></span> Assignee avatars visible without clicking</li>
+          <li><span class="check-icon"><svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" style="color: currentColor; "><polyline points="20 6 9 17 4 12"/></svg></span> Click any card to open full bug detail</li>
+        </ul>
+      </div>
+      <div class="spotlight-visual">
+        <div class="kanban-demo">
+          <div class="kanban-col">
+            <div class="kanban-col-title"><svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: currentColor; "><circle cx="12" cy="12" r="10"/></svg> Open</div>
+            <div class="kanban-card">
+              <div class="kanban-card-line"></div><div class="kanban-card-line short"></div>
+              <div class="kanban-card-footer"><div class="kanban-mini-badge badge-critical"></div><div class="kanban-mini-avatar"></div></div>
+            </div>
+            <div class="kanban-card">
+              <div class="kanban-card-line" style="width:80%"></div><div class="kanban-card-line short"></div>
+              <div class="kanban-card-footer"><div class="kanban-mini-badge badge-high"></div><div class="kanban-mini-avatar" style="background:linear-gradient(135deg,#10b981,#059669)"></div></div>
+            </div>
+          </div>
+          <div class="kanban-col">
+            <div class="kanban-col-title" style="color:#f59e0b"><svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: currentColor; "><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> In Progress</div>
+            <div class="kanban-card" style="border-color:rgba(245,158,11,0.2)">
+              <div class="kanban-card-line"></div><div class="kanban-card-line short"></div>
+              <div class="kanban-card-footer"><div class="kanban-mini-badge badge-medium"></div><div class="kanban-mini-avatar" style="background:linear-gradient(135deg,#f59e0b,#d97706)"></div></div>
+            </div>
+          </div>
+          <div class="kanban-col">
+            <div class="kanban-col-title" style="color:#10b981"><svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: currentColor; "><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg> Resolved</div>
+            <div class="kanban-card" style="border-color:rgba(16,185,129,0.2)">
+              <div class="kanban-card-line"></div><div class="kanban-card-line short"></div>
+              <div class="kanban-card-footer"><div class="kanban-mini-badge badge-resolved"></div><div class="kanban-mini-avatar" style="background:linear-gradient(135deg,#a78bfa,#7c3aed)"></div></div>
+            </div>
+            <div class="kanban-card" style="border-color:rgba(16,185,129,0.2)">
+              <div class="kanban-card-line" style="width:70%"></div><div class="kanban-card-line short"></div>
+              <div class="kanban-card-footer"><div class="kanban-mini-badge badge-resolved"></div><div class="kanban-mini-avatar" style="background:linear-gradient(135deg,#ef4444,#dc2626)"></div></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- COMMENTS SPOTLIGHT -->
+<section style="background:var(--surface); padding:80px 24px">
+  <div class="container">
+    <div class="spotlight reverse fade-up">
+      <div>
+        <span class="spotlight-tag"><svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: currentColor; "><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg> Threaded Comments</span>
+        <h3 class="spotlight-title">Collaborative discussion, built-in</h3>
+        <p class="spotlight-desc">Every bug is a conversation. Threaded Markdown comments let your team discuss, share code snippets, quote blocks, and coordinate fixes — all without leaving the app.</p>
+        <ul class="check-list">
+          <li><span class="check-icon"><svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" style="color: currentColor; "><polyline points="20 6 9 17 4 12"/></svg></span> Full Markdown — code blocks, lists, bold, quotes</li>
+          <li><span class="check-icon"><svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" style="color: currentColor; "><polyline points="20 6 9 17 4 12"/></svg></span> Threaded replies to stay organized</li>
+          <li><span class="check-icon"><svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" style="color: currentColor; "><polyline points="20 6 9 17 4 12"/></svg></span> Unique color identity per team member</li>
+          <li><span class="check-icon"><svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" style="color: currentColor; "><polyline points="20 6 9 17 4 12"/></svg></span> Role badges: Admin, Tester, Developer, Manager</li>
+        </ul>
+      </div>
+      <div class="spotlight-visual">
+        <div class="comments-demo">
+          <div class="comment-block">
+            <div class="comment-avatar" style="background:linear-gradient(135deg,#6366f1,#4338ca)"></div>
+            <div class="comment-content">
+              <div class="comment-author-row"><div class="comment-name"></div><div class="comment-role" style="background:rgba(239,68,68,0.2)"></div></div>
+              <div class="comment-text-line"></div><div class="comment-text-line w80"></div><div class="comment-text-line w60"></div>
+            </div>
+          </div>
+          <div class="comment-block" style="margin-left:24px;border-left:2px solid rgba(16,185,129,0.3)">
+            <div class="comment-avatar" style="background:linear-gradient(135deg,#10b981,#059669)"></div>
+            <div class="comment-content">
+              <div class="comment-author-row"><div class="comment-name"></div><div class="comment-role" style="background:rgba(245,158,11,0.2)"></div></div>
+              <div class="comment-text-line w80"></div><div class="comment-text-line w60"></div>
+            </div>
+          </div>
+          <div class="comment-block">
+            <div class="comment-avatar" style="background:linear-gradient(135deg,#f59e0b,#d97706)"></div>
+            <div class="comment-content">
+              <div class="comment-author-row"><div class="comment-name"></div><div class="comment-role" style="background:rgba(59,130,246,0.2)"></div></div>
+              <div class="comment-text-line"></div><div class="comment-text-line w80"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ROLES -->
+<section id="roles" style="background:#09090b">
+  <div class="container">
+    <div class="section-label"><svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: currentColor; "><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg> Role-Based Access Control</div>
+    <h2 class="section-title fade-up">The right access,<br/>for every team member.</h2>
+    <p class="section-sub fade-up delay-1">Granular permission control ensures every person sees exactly what they need — and nothing they shouldn't.</p>
+
+    <div class="roles-grid">
+      <div class="role-card fade-up">
+        <div class="role-icon"><svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: currentColor; "><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg></div>
+        <div class="role-name">Admin</div>
+        <div class="role-desc">Full platform control. Manages the organization, invites members, sets roles, and has access to all projects and bugs.</div>
+        <div class="role-perms">
+          <div class="role-perm"><span class="perm-dot"></span>Manage organization &amp; members</div>
+          <div class="role-perm"><span class="perm-dot"></span>Create / archive projects</div>
+          <div class="role-perm"><span class="perm-dot"></span>Log, assign, and resolve bugs</div>
+          <div class="role-perm"><span class="perm-dot"></span>View full analytics &amp; reports</div>
+        </div>
+      </div>
+      <div class="role-card fade-up delay-1">
+        <div class="role-icon"><svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: currentColor; "><circle cx="12" cy="12" r="10"/><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"/></svg></div>
+        <div class="role-name">Manager</div>
+        <div class="role-desc">Oversees team workflows. Assigns bugs, tracks progress, and manages projects without full admin privileges.</div>
+        <div class="role-perms">
+          <div class="role-perm"><span class="perm-dot"></span>Create and manage projects</div>
+          <div class="role-perm"><span class="perm-dot"></span>Assign bugs to developers</div>
+          <div class="role-perm"><span class="perm-dot"></span>Log and update bugs</div>
+          <div class="role-perm"><span class="perm-dot"></span>View team dashboard</div>
+        </div>
+      </div>
+      <div class="role-card fade-up delay-2">
+        <div class="role-icon"><svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: currentColor; "><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg></div>
+        <div class="role-name">Tester</div>
+        <div class="role-desc">QA specialists who discover and report defects. Log bugs, attach evidence, and verify fixes once deployed.</div>
+        <div class="role-perms">
+          <div class="role-perm"><span class="perm-dot"></span>Log new bug reports</div>
+          <div class="role-perm"><span class="perm-dot"></span>Attach screenshots &amp; videos</div>
+          <div class="role-perm"><span class="perm-dot"></span>Comment and collaborate</div>
+          <div class="role-perm"><span class="perm-dot"></span>Mark bugs as verified</div>
+        </div>
+      </div>
+      <div class="role-card fade-up delay-3">
+        <div class="role-icon"><svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: currentColor; "><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg></div>
+        <div class="role-name">Developer</div>
+        <div class="role-desc">Focused view — sees only assigned bugs. Updates status, logs work time, and communicates via comments.</div>
+        <div class="role-perms">
+          <div class="role-perm"><span class="perm-dot"></span>View assigned bugs only</div>
+          <div class="role-perm"><span class="perm-dot"></span>Update bug status</div>
+          <div class="role-perm"><span class="perm-dot"></span>Log work hours</div>
+          <div class="role-perm"><span class="perm-dot"></span>Reply to comments</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- WORKFLOW -->
+<section id="workflow" style="background:var(--surface)">
+  <div class="container workflow-grid">
+    <div>
+      <div class="section-label"><svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: currentColor; "><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg> How It Works</div>
+      <h2 class="section-title fade-up">From discovery<br/>to resolution.</h2>
+      <p class="section-sub fade-up delay-1">A streamlined workflow that keeps every bug moving forward — with full transparency and accountability at every step.</p>
+    </div>
+    <div class="workflow-steps fade-up">
+      <div class="workflow-step">
+        <div class="step-num">1</div>
+        <div class="step-content">
+          <div class="step-title">Tester or Admin logs the bug</div>
+          <div class="step-desc">Fill in the title, description, steps to reproduce, priority, project, and attach a screenshot or recording. Assign immediately or leave it for triage.</div>
+        </div>
+      </div>
+      <div class="workflow-step">
+        <div class="step-num">2</div>
+        <div class="step-content">
+          <div class="step-title">Manager assigns to a Developer</div>
+          <div class="step-desc">The Manager reviews the backlog, assigns the right developer, and sets priority. The developer receives an instant real-time notification.</div>
+        </div>
+      </div>
+      <div class="workflow-step">
+        <div class="step-num">3</div>
+        <div class="step-content">
+          <div class="step-title">Developer investigates and comments</div>
+          <div class="step-desc">Status moves to "In Progress". The developer logs work hours, uses threaded comments to share findings, and links related issues.</div>
+        </div>
+      </div>
+      <div class="workflow-step">
+        <div class="step-num">4</div>
+        <div class="step-content">
+          <div class="step-title">Bug is resolved and closed</div>
+          <div class="step-desc">Developer marks it Resolved. Tester verifies the fix and closes it. A complete activity log captures the full lifecycle permanently.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- INTEGRATIONS -->
+<section id="integrations" style="background:#09090b">
+  <div class="container" style="text-align:center">
+    <div class="section-label" style="justify-content:center"><svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: currentColor; "><path d="M12 22v-5"/><path d="M9 8V2"/><path d="M15 8V2"/><path d="M18 8v5a4 4 0 0 1-4 4h-4a4 4 0 0 1-4-4V8Z"/></svg> Built-in Capabilities</div>
+    <h2 class="section-title fade-up">Everything in one place.</h2>
+    <p class="section-sub fade-up delay-1" style="margin:0 auto">No extra integrations needed. BugTracker Pro ships enterprise features out of the box.</p>
+    <div class="integration-logos fade-up delay-2">
+      <div class="integration-pill"><span class="integration-emoji"><svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: currentColor; "><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></span> Microsoft SSO</div>
+      <div class="integration-pill"><span class="integration-emoji"><svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: currentColor; "><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg></span> WebSocket Real-time</div>
+      <div class="integration-pill"><span class="integration-emoji"><svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: currentColor; "><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><polyline points="9 15 12 12 15 15"/></svg></span> File Attachments</div>
+      <div class="integration-pill"><span class="integration-emoji"><svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: currentColor; "><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></span> CSV Export</div>
+      <div class="integration-pill"><span class="integration-emoji"><svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: currentColor; "><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg></span> Dark / Light Mode</div>
+      <div class="integration-pill"><span class="integration-emoji"><svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: currentColor; "><rect x="5" y="2" width="14" height="20" rx="2" ry="2"/><line x1="12" y1="18" x2="12.01" y2="18"/></svg></span> Mobile Responsive</div>
+      <div class="integration-pill"><span class="integration-emoji"><svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: currentColor; "><path d="M18 3a3 3 0 0 0-3 3v12a3 3 0 0 0 3 3 3 3 0 0 0 3-3 3 3 0 0 0-3-3H6a3 3 0 0 0-3 3 3 3 0 0 0 3 3 3 3 0 0 0 3-3V6a3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3h12a3 3 0 0 0 3-3 3 3 0 0 0-3-3z"/></svg></span> Command Palette</div>
+      <div class="integration-pill"><span class="integration-emoji"><svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: currentColor; "><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg></span> Markdown Support</div>
+      <div class="integration-pill"><span class="integration-emoji"><svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: currentColor; "><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg></span> Audio Notifications</div>
+      <div class="integration-pill"><span class="integration-emoji"><svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: currentColor; "><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg></span> Custom Tags</div>
+      <div class="integration-pill"><span class="integration-emoji"><svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: currentColor; "><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></span> Work Time Logging</div>
+      <div class="integration-pill"><span class="integration-emoji"><svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: currentColor; "><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg></span> Bug Linking</div>
+    </div>
+  </div>
+</section>
+
+<!-- CTA -->
+<section class="cta-section">
+  <div class="cta-bg"></div>
+  <div class="container cta-content">
+    <div class="hero-badge" style="margin:0 auto 24px;width:fit-content">
+      <span class="hero-badge-dot"></span>
+      Free to get started &middot; No credit card required
+    </div>
+    <h2 class="cta-title">
+      Ready to ship<br/>
+      <span class="gradient-text">bug-free software?</span>
+    </h2>
+    <p class="cta-sub">Join engineering teams using BugTracker Pro to move faster, communicate better, and ship with confidence.</p>
+    <div class="cta-actions">
+      <button class="btn-hero-primary" onclick="window.location.href='http://localhost:5173/login'">
+        Start Tracking for Free &rarr;
+      </button>
+      <button class="btn-hero-secondary" onclick="document.getElementById('features').scrollIntoView({behavior:'smooth'})">
+        Explore Features
+      </button>
+    </div>
+  </div>
+</section>
+
+<!-- FOOTER -->
+<footer>
+  <div class="footer-inner">
+    <div>
+      <a href="#" class="nav-logo">
+        <div class="nav-logo-icon" style="width:28px;height:28px">
+          <svg width="14" height="14" viewBox="0 0 64 64" fill="none">
+            <path d="M32 10 L48 18 L48 34 C48 44 41 52 32 56 C23 52 16 44 16 34 L16 18 Z" fill="none" stroke="#fff" stroke-width="2.5"/>
+            <circle cx="32" cy="32" r="8" fill="none" stroke="#a5b4fc" stroke-width="2"/>
+            <circle cx="32" cy="32" r="2.5" fill="#fff"/>
+          </svg>
+        </div>
+        BugTracker <span class="nav-logo-badge">Pro</span>
+      </a>
+      <p class="footer-brand-desc">The modern issue tracking platform for engineering teams that care about quality and velocity.</p>
+    </div>
+    <div>
+      <div class="footer-col-title">Product</div>
+      <div class="footer-links">
+        <a href="#features">Features</a>
+        <a href="#workflow">How it Works</a>
+        <a href="#roles">Team Roles</a>
+        <a href="#integrations">Integrations</a>
+      </div>
+    </div>
+    <div>
+      <div class="footer-col-title">Platform</div>
+      <div class="footer-links">
+        <a href="http://localhost:5173/login">Sign In</a>
+        <a href="http://localhost:5173/login">Get Started</a>
+        <a href="http://localhost:5173/">Dashboard</a>
+        <a href="http://localhost:5173/bugs">All Issues</a>
+      </div>
+    </div>
+    <div>
+      <div class="footer-col-title">Built With</div>
+      <div class="footer-links">
+        <a href="#">React + Vite</a>
+        <a href="#">Django REST Framework</a>
+        <a href="#">WebSockets (Channels)</a>
+        <a href="#">Recharts</a>
+      </div>
+    </div>
+  </div>
+  <div class="footer-bottom">
+    <div class="footer-copy">&copy; 2026 BugTracker Pro. Built for modern engineering teams.</div>
+    <div class="footer-badge"><span><svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: currentColor; "><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg></span> Real-time &middot; Secure &middot; Open</div>
+  </div>
+</footer>
+
+<script>
+  function toggleMenu() {
+    document.getElementById('navbar').classList.toggle('open');
+  }
+
+  // Close menu on link click
+  document.querySelectorAll('#navLinks a').forEach(link => {
+    link.addEventListener('click', () => document.getElementById('navbar').classList.remove('open'));
+  });
+
+  // Scroll reveal
+  const observer = new IntersectionObserver((entries) => {
+    entries.forEach(e => { if (e.isIntersecting) e.target.classList.add('visible'); });
+  }, { threshold: 0.1 });
+  document.querySelectorAll('.fade-up').forEach(el => observer.observe(el));
+
+  // Nav scroll style
+  window.addEventListener('scroll', () => {
+    document.getElementById('navbar').style.borderBottomColor =
+      window.scrollY > 20 ? 'rgba(255,255,255,0.1)' : 'rgba(255,255,255,0.07)';
+  });
+</script>
+</body>
+</html>
