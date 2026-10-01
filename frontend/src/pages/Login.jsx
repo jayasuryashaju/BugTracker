@@ -1,174 +1,118 @@
-import { useState, useEffect } from 'react';
+import { useEffect, useState } from 'react';
+import { Navigate, useLocation, useNavigate } from 'react-router-dom';
+import { Activity, KanbanSquare, ShieldCheck, Zap } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
-import { msalInstance, loginRequest } from '../msalConfig';
+import { loginRequest, msalConfigured, msalInstance } from '../msalConfig';
 import Logo from '../components/Logo';
 
+const MicrosoftIcon = () => (
+  <svg width="18" height="18" viewBox="0 0 21 21" aria-hidden="true">
+    <rect x="1" y="1" width="9" height="9" fill="#F25022" /><rect x="11" y="1" width="9" height="9" fill="#7FBA00" />
+    <rect x="1" y="11" width="9" height="9" fill="#00A4EF" /><rect x="11" y="11" width="9" height="9" fill="#FFB900" />
+  </svg>
+);
+
 const Login = () => {
-  const [isSignUp, setIsSignUp] = useState(false);
-  
-  const [username, setUsername] = useState('');
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [firstName, setFirstName] = useState('');
-  const [lastName, setLastName] = useState('');
+  const { user, login, register, authError, setAuthError } = useAuth();
+  const navigate = useNavigate();
+  const location = useLocation();
+  const [mode, setMode] = useState('signin');
+  const [form, setForm] = useState({ identifier: '', email: '', password: '', first_name: '', last_name: '' });
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
+  const signup = mode === 'signup';
 
-  const { login, register, authError, setAuthError } = useAuth();
-  const [loading, setLoading] = useState(false);
+  useEffect(() => { document.title = `${signup ? 'Create account' : 'Sign in'} · BugTracker Pro`; }, [signup]);
 
-  useEffect(() => {
-    document.title = `${isSignUp ? 'Create Account' : 'Sign In'} | BugTracker Pro`;
-  }, [isSignUp]);
+  if (user) return <Navigate to={location.state?.from || '/'} replace />;
 
-  const handleSubmit = async (e) => {
+  const set = (key) => (e) => setForm((f) => ({ ...f, [key]: e.target.value }));
+  const switchMode = () => { setMode(signup ? 'signin' : 'signup'); setError(''); setAuthError(''); };
+
+  const submit = async (e) => {
     e.preventDefault();
-    setLoading(true);
+    setBusy(true);
+    setError('');
+    setAuthError('');
     try {
-      if (isSignUp) {
-        await register({
-          username: username || email.split('@')[0],
-          email,
-          password,
-          first_name: firstName,
-          last_name: lastName
-        });
+      if (signup) {
+        await register({ email: form.email, password: form.password, first_name: form.first_name, last_name: form.last_name });
+        navigate('/profile', { replace: true });
       } else {
-        await login(username, password);
+        await login(form.identifier, form.password);
+        navigate(location.state?.from || '/', { replace: true });
       }
     } catch (err) {
-      // Handled in AuthContext
-    } finally {
-      setLoading(false);
+      setError(err.message);
+      setBusy(false);
     }
   };
 
-  const handleMicrosoftLogin = () => {
+  const microsoft = () => {
+    setError('');
     setAuthError('');
-    sessionStorage.removeItem('auth_error');
-    msalInstance.loginRedirect(loginRequest);
+    msalInstance.loginRedirect(loginRequest).catch((err) => setError(err.message || 'Microsoft sign-in failed.'));
   };
 
+  const shownError = error || authError;
+
   return (
-    <div className="login-page">
-      <div className="login-card animate-in" style={{ width: '420px' }}>
-        <div style={{ marginBottom: '28px' }}>
-          <Logo size="lg" />
-        </div>
+    <div className="auth">
+      <section className="auth__panel">
+        <div className="auth__form animate-in">
+          <div style={{ marginBottom: 32 }}><Logo size="lg" /></div>
+          <h1>{signup ? 'Create your account' : 'Welcome back'}</h1>
+          <p className="muted" style={{ margin: '6px 0 24px' }}>
+            {signup ? 'Start tracking bugs with your team in minutes.' : 'Sign in to pick up where you left off.'}
+          </p>
 
-        <h2 className="login-card__heading">{isSignUp ? 'Create your account' : 'Welcome back'}</h2>
-        <p className="login-card__sub">
-          {isSignUp ? 'Sign up to manage and track software issues' : 'Sign in to your account to continue'}
-        </p>
+          {shownError && <div className="alert" role="alert" style={{ marginBottom: 16 }}>{shownError}</div>}
 
-        {authError && (
-          <div className="login-card__error mb-4" style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-            <span>{authError}</span>
-            {authError.includes('already registered') && (
-              <span style={{ fontSize: '0.75rem', opacity: 0.8, marginTop: '4px' }}>
-                Tip: Contact your company administrator to invite your email address.
-              </span>
+          <form onSubmit={submit} className="stack" style={{ gap: 14 }}>
+            {signup && (
+              <div className="form-grid" style={{ gridTemplateColumns: '1fr 1fr' }}>
+                <div className="field"><label htmlFor="fn">First name</label><input id="fn" className="input" value={form.first_name} onChange={set('first_name')} autoComplete="given-name" /></div>
+                <div className="field"><label htmlFor="ln">Last name</label><input id="ln" className="input" value={form.last_name} onChange={set('last_name')} autoComplete="family-name" /></div>
+              </div>
             )}
-          </div>
-        )}
-
-        <form onSubmit={handleSubmit} className="login-card__form">
-          {isSignUp && (
-            <div className="form-row">
-              <div className="form-group">
-                <label className="form-label">First Name</label>
-                <input
-                  className="form-input"
-                  value={firstName}
-                  onChange={e => setFirstName(e.target.value)}
-                  placeholder="John"
-                />
-              </div>
-              <div className="form-group">
-                <label className="form-label">Last Name</label>
-                <input
-                  className="form-input"
-                  value={lastName}
-                  onChange={e => setLastName(e.target.value)}
-                  placeholder="Doe"
-                />
-              </div>
+            {signup ? (
+              <div className="field"><label htmlFor="em">Work email</label><input id="em" type="email" required className="input" value={form.email} onChange={set('email')} placeholder="you@company.com" autoComplete="email" /></div>
+            ) : (
+              <div className="field"><label htmlFor="id">Email or username</label><input id="id" required className="input" value={form.identifier} onChange={set('identifier')} autoComplete="username" autoFocus /></div>
+            )}
+            <div className="field">
+              <label htmlFor="pw">Password</label>
+              <input id="pw" type="password" required className="input" value={form.password} onChange={set('password')} autoComplete={signup ? 'new-password' : 'current-password'} minLength={signup ? 8 : undefined} />
+              {signup && <span className="hint">At least 8 characters, not too common.</span>}
             </div>
+            <button type="submit" className="btn btn--primary btn--lg btn--block" disabled={busy}>
+              {busy ? 'Please wait…' : signup ? 'Create account' : 'Sign in'}
+            </button>
+          </form>
+
+          {msalConfigured && (
+            <>
+              <div className="divider-text">or</div>
+              <button className="btn btn--secondary btn--lg btn--block" onClick={microsoft} disabled={busy}><MicrosoftIcon /> Continue with Microsoft</button>
+            </>
           )}
 
-          {isSignUp ? (
-            <div className="form-group">
-              <label className="form-label">Email *</label>
-              <input
-                type="email"
-                className="form-input"
-                required
-                value={email}
-                onChange={e => {
-                  setEmail(e.target.value);
-                  if (!username) setUsername(e.target.value.split('@')[0]);
-                }}
-                placeholder="you@company.com"
-              />
-            </div>
-          ) : (
-            <div className="form-group">
-              <label className="form-label">Username or Email</label>
-              <input
-                className="form-input"
-                required
-                value={username}
-                onChange={e => setUsername(e.target.value)}
-                placeholder="Enter username or email"
-                autoComplete="username"
-              />
-            </div>
-          )}
-
-          <div className="form-group">
-            <label className="form-label">Password *</label>
-            <input
-              type="password"
-              className="form-input"
-              required
-              value={password}
-              onChange={e => setPassword(e.target.value)}
-              placeholder="Enter password"
-              autoComplete="current-password"
-            />
-          </div>
-
-          <button
-            type="submit"
-            className="btn btn--primary btn--lg btn--full"
-            disabled={loading}
-            style={{ marginTop: '4px' }}
-          >
-            {loading ? 'Processing...' : (isSignUp ? 'Sign Up' : 'Sign In')}
-          </button>
-        </form>
-
-        <div className="login-card__divider">or continue with</div>
-
-        <button onClick={handleMicrosoftLogin} className="login-card__ms-btn" disabled={loading}>
-          <svg width="18" height="18" viewBox="0 0 21 21" fill="none">
-            <rect x="1" y="1" width="9" height="9" fill="#F25022"/>
-            <rect x="11" y="1" width="9" height="9" fill="#7FBA00"/>
-            <rect x="1" y="11" width="9" height="9" fill="#00A4EF"/>
-            <rect x="11" y="11" width="9" height="9" fill="#FFB900"/>
-          </svg>
-          Continue with Microsoft
-        </button>
-
-        <div style={{ textAlign: 'center', marginTop: '20px', fontSize: '0.85rem', color: 'var(--text-muted)' }}>
-          {isSignUp ? 'Already have an account?' : "Don't have an account?"}{' '}
-          <button
-            type="button"
-            onClick={() => { setIsSignUp(!isSignUp); }}
-            style={{ background: 'none', border: 'none', color: 'var(--accent)', fontWeight: 600, cursor: 'pointer' }}
-          >
-            {isSignUp ? 'Sign In' : 'Sign Up'}
-          </button>
+          <p className="muted" style={{ textAlign: 'center', marginTop: 24 }}>
+            {signup ? 'Already have an account?' : 'New to BugTracker Pro?'}{' '}
+            <button type="button" className="link" onClick={switchMode}>{signup ? 'Sign in' : 'Create an account'}</button>
+          </p>
+          {signup && <p className="hint" style={{ textAlign: 'center', marginTop: 8 }}>Invited by a teammate? Sign up with the email they invited.</p>}
         </div>
-      </div>
+      </section>
+      <aside className="auth__aside" aria-hidden="true">
+        <h2>Find it. Fix it. Ship it.</h2>
+        <ul>
+          <li><Zap size={20} /><span><b>Live by default.</b> Assignments, comments and status changes appear for everyone instantly.</span></li>
+          <li><KanbanSquare size={20} /><span><b>Board and list views.</b> Drag bugs across Open, In Progress, Resolved and Closed.</span></li>
+          <li><Activity size={20} /><span><b>See the trend.</b> Created versus resolved, priority mix and overdue work at a glance.</span></li>
+          <li><ShieldCheck size={20} /><span><b>Roles that make sense.</b> Admins, managers, testers and developers each see what they need.</span></li>
+        </ul>
+      </aside>
     </div>
   );
 };

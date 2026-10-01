@@ -1,56 +1,71 @@
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
-import { AuthProvider, useAuth } from './context/AuthContext';
-import Layout from './components/Layout';
-import Loader from './components/Loader';
-import BugList from './pages/BugList';
-import Bugs from './pages/Bugs';
-import BugDetail from './pages/BugDetail';
-import BugCreate from './pages/BugCreate';
-import Login from './pages/Login';
-import Profile from './pages/Profile';
-import Team from './pages/Team';
-import Projects from './pages/Projects';
-import ProjectDetail from './pages/ProjectDetail';
-import OrganizationSettings from './pages/OrganizationSettings';
-import Notifications from './pages/Notifications';
-import NotFound from './pages/NotFound';
-import ErrorBoundary from './components/ErrorBoundary';
-import KanbanBoard from './pages/KanbanBoard';
+import { lazy, Suspense } from 'react';
+import { BrowserRouter, Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
-import './index.css';
+import { AuthProvider, useAuth } from './context/AuthContext';
+import { NotificationsProvider } from './context/NotificationsContext';
+import Layout from './components/Layout';
+import ErrorBoundary from './components/ErrorBoundary';
+import { FullScreenLoader, PageLoader } from './components/ui';
+import Login from './pages/Login';
 
-const ProtectedRoute = ({ children }) => {
+const Dashboard = lazy(() => import('./pages/Dashboard'));
+const Bugs = lazy(() => import('./pages/Bugs'));
+const BugDetail = lazy(() => import('./pages/BugDetail'));
+const BugCreate = lazy(() => import('./pages/BugCreate'));
+const KanbanBoard = lazy(() => import('./pages/KanbanBoard'));
+const Projects = lazy(() => import('./pages/Projects'));
+const ProjectDetail = lazy(() => import('./pages/ProjectDetail'));
+const Team = lazy(() => import('./pages/Team'));
+const OrganizationSettings = lazy(() => import('./pages/OrganizationSettings'));
+const Notifications = lazy(() => import('./pages/Notifications'));
+const Profile = lazy(() => import('./pages/Profile'));
+const NotFound = lazy(() => import('./pages/NotFound'));
+
+const Protected = ({ children }) => {
   const { user, loading } = useAuth();
-  if (loading) return <Loader fullScreen text="Loading..." />;
-  if (!user) return <Navigate to="/login" />;
-  return <Layout>{children}</Layout>;
+  const location = useLocation();
+  if (loading) return <FullScreenLoader text="Loading your workspace…" />;
+  if (!user) return <Navigate to="/login" replace state={{ from: location.pathname + location.search }} />;
+  return (
+    <Layout>
+      <Suspense fallback={<PageLoader />}>{children}</Suspense>
+    </Layout>
+  );
 };
 
-function App() {
+const toastOptions = {
+  style: {
+    background: 'var(--surface)', color: 'var(--text)', border: '1px solid var(--border-strong)',
+    boxShadow: 'var(--shadow)', fontSize: '13.5px', maxWidth: 380,
+  },
+};
+
+export default function App() {
   return (
     <ErrorBoundary>
-      <Toaster position="top-right" />
-      <Router>
+      <BrowserRouter>
         <AuthProvider>
-        <Routes>
-          <Route path="/login" element={<Login />} />
-          <Route path="/" element={<ProtectedRoute><BugList /></ProtectedRoute>} />
-          <Route path="/projects" element={<ProtectedRoute><Projects /></ProtectedRoute>} />
-          <Route path="/project/:id" element={<ProtectedRoute><ProjectDetail /></ProtectedRoute>} />
-          <Route path="/bugs" element={<ProtectedRoute><Bugs /></ProtectedRoute>} />
-          <Route path="/create" element={<ProtectedRoute><BugCreate /></ProtectedRoute>} />
-          <Route path="/board" element={<ProtectedRoute><KanbanBoard /></ProtectedRoute>} />
-          <Route path="/bug/:id" element={<ProtectedRoute><BugDetail /></ProtectedRoute>} />
-          <Route path="/team" element={<ProtectedRoute><Team /></ProtectedRoute>} />
-          <Route path="/organization" element={<ProtectedRoute><OrganizationSettings /></ProtectedRoute>} />
-          <Route path="/notifications" element={<ProtectedRoute><Notifications /></ProtectedRoute>} />
-          <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
-          <Route path="*" element={<NotFound />} />
-        </Routes>
-      </AuthProvider>
-    </Router>
+          <NotificationsProvider>
+            <Toaster position="top-right" toastOptions={toastOptions} />
+            <Routes>
+              <Route path="/login" element={<Login />} />
+              <Route path="/" element={<Protected><Dashboard /></Protected>} />
+              <Route path="/bugs" element={<Protected><Bugs /></Protected>} />
+              <Route path="/bug/:id" element={<Protected><BugDetail /></Protected>} />
+              <Route path="/create" element={<Protected><BugCreate /></Protected>} />
+              <Route path="/board" element={<Protected><KanbanBoard /></Protected>} />
+              <Route path="/projects" element={<Protected><Projects /></Protected>} />
+              <Route path="/project/:id" element={<Protected><ProjectDetail /></Protected>} />
+              <Route path="/team" element={<Protected><Team /></Protected>} />
+              <Route path="/organization" element={<Protected><OrganizationSettings /></Protected>} />
+              <Route path="/notifications" element={<Protected><Notifications /></Protected>} />
+              <Route path="/profile" element={<Protected><Profile /></Protected>} />
+              <Route path="/projects/:id" element={<Navigate to="/projects" replace />} />
+              <Route path="*" element={<Protected><NotFound /></Protected>} />
+            </Routes>
+          </NotificationsProvider>
+        </AuthProvider>
+      </BrowserRouter>
     </ErrorBoundary>
   );
 }
-
-export default App;

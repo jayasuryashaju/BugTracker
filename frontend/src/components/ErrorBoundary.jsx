@@ -1,39 +1,29 @@
-import React from 'react';
+import { Component } from 'react';
 import { AlertTriangle } from 'lucide-react';
 
-class ErrorBoundary extends React.Component {
-  constructor(props) {
-    super(props);
-    this.state = { hasError: false, error: null };
+class ErrorBoundary extends Component {
+  state = { hasError: false };
+
+  static getDerivedStateFromError() {
+    return { hasError: true };
   }
 
-  static getDerivedStateFromError(error) {
-    return { hasError: true, error };
-  }
-
-  componentDidCatch(error, errorInfo) {
-    console.error("ErrorBoundary caught an error", error, errorInfo);
+  componentDidCatch(error, info) {
+    console.error('ErrorBoundary caught an error', error, info);
   }
 
   render() {
-    if (this.state.hasError) {
-      return (
-        <div className="empty-state" style={{ height: '100vh', justifyContent: 'center' }}>
-          <div className="empty-state__icon" style={{ color: 'var(--status-critical)' }}>
-            <AlertTriangle size={48} />
-          </div>
-          <h2 style={{ marginTop: '16px' }}>Something went wrong</h2>
-          <p className="text-muted" style={{ maxWidth: '400px', margin: '12px auto' }}>
-            We're sorry, an unexpected error occurred. Please refresh the page or contact support if the problem persists.
-          </p>
-          <button onClick={() => window.location.reload()} className="btn btn--primary" style={{ marginTop: '16px' }}>
-            Refresh Page
-          </button>
+    if (!this.state.hasError) return this.props.children;
+    return (
+      <div className="fullscreen-center">
+        <div className="empty">
+          <div className="empty__icon" style={{ color: 'var(--danger)' }}><AlertTriangle size={24} /></div>
+          <h3>Something went wrong</h3>
+          <p>An unexpected error occurred. Reloading usually fixes it.</p>
+          <button className="btn btn--primary" onClick={() => window.location.reload()}>Reload page</button>
         </div>
-      );
-    }
-
-    return this.props.children;
+      </div>
+    );
   }
 }
 

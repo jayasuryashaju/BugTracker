@@ -1,77 +1,65 @@
-import React from 'react';
-import { Bold, Italic, Code, Link as LinkIcon, List, Quote } from 'lucide-react';
+import { useRef, useState } from 'react';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
+import { Bold, Italic, Code, Link as LinkIcon, List, Quote, FileCode } from 'lucide-react';
 
-const MarkdownEditor = ({ value, onChange, placeholder = '', minHeight = '150px' }) => {
-  
-  const insertText = (prefix, suffix = '') => {
-    const textarea = document.activeElement;
-    if (!textarea || textarea.tagName !== 'TEXTAREA') return;
-    
-    const start = textarea.selectionStart;
-    const end = textarea.selectionEnd;
-    const text = textarea.value;
-    const before = text.substring(0, start);
-    const selected = text.substring(start, end);
-    const after = text.substring(end);
-    
-    const newValue = `${before}${prefix}${selected}${suffix}${after}`;
-    onChange(newValue);
-    
-    setTimeout(() => {
-      textarea.focus();
-      textarea.setSelectionRange(start + prefix.length, end + prefix.length);
-    }, 0);
+export const Markdown = ({ children }) => (
+  <div className="markdown"><ReactMarkdown remarkPlugins={[remarkGfm]}>{children || ''}</ReactMarkdown></div>
+);
+
+const MarkdownEditor = ({ value, onChange, placeholder = '', rows = 6, id }) => {
+  const ref = useRef(null);
+  const [preview, setPreview] = useState(false);
+
+  const wrap = (before, after = '', placeholderText = 'text') => {
+    const el = ref.current;
+    if (!el) return;
+    const { selectionStart: start, selectionEnd: end } = el;
+    const selected = value.slice(start, end) || placeholderText;
+    onChange(`${value.slice(0, start)}${before}${selected}${after}${value.slice(end)}`);
+    requestAnimationFrame(() => {
+      el.focus();
+      el.setSelectionRange(start + before.length, start + before.length + selected.length);
+    });
+  };
+  const linePrefix = (prefix) => {
+    const el = ref.current;
+    if (!el) return;
+    const start = value.lastIndexOf('\n', el.selectionStart - 1) + 1;
+    onChange(`${value.slice(0, start)}${prefix}${value.slice(start)}`);
+    requestAnimationFrame(() => el.focus());
   };
 
-  const toolbarStyle = {
-    display: 'flex', gap: '4px', padding: '8px', 
-    backgroundColor: 'var(--bg-surface)', 
-    border: '1px solid var(--border)', 
-    borderBottom: 'none',
-    borderTopLeftRadius: 'var(--radius-md)', 
-    borderTopRightRadius: 'var(--radius-md)'
-  };
-  
-  const btnStyle = {
-    background: 'transparent', border: 'none', 
-    color: 'var(--text-secondary)', padding: '4px', 
-    cursor: 'pointer', borderRadius: '4px',
-    display: 'flex', alignItems: 'center', justifyContent: 'center'
-  };
+  const tools = [
+    ['Bold', Bold, () => wrap('**', '**')],
+    ['Italic', Italic, () => wrap('*', '*')],
+    ['Bulleted list', List, () => linePrefix('- ')],
+    ['Quote', Quote, () => linePrefix('> ')],
+    ['Inline code', Code, () => wrap('`', '`', 'code')],
+    ['Code block', FileCode, () => wrap('```\n', '\n```', 'code')],
+    ['Link', LinkIcon, () => wrap('[', '](https://)', 'link text')],
+  ];
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column' }} onMouseDown={(e) => {
-        if (e.target.tagName === 'BUTTON' || e.target.closest('button')) {
-            e.preventDefault();
-        }
-    }}>
-      <div style={toolbarStyle}>
-        <button type="button" onClick={() => insertText('**', '**')} style={btnStyle} title="Bold"><Bold size={16} /></button>
-        <button type="button" onClick={() => insertText('*', '*')} style={btnStyle} title="Italic"><Italic size={16} /></button>
-        <div style={{ width: '1px', backgroundColor: 'var(--border)', margin: '0 4px' }} />
-        <button type="button" onClick={() => insertText('- ')} style={btnStyle} title="List"><List size={16} /></button>
-        <button type="button" onClick={() => insertText('> ')} style={btnStyle} title="Quote"><Quote size={16} /></button>
-        <div style={{ width: '1px', backgroundColor: 'var(--border)', margin: '0 4px' }} />
-        <button type="button" onClick={() => insertText('`', '`')} style={btnStyle} title="Inline Code"><Code size={16} /></button>
-        <button type="button" onClick={() => insertText('```\n', '\n```')} style={btnStyle} title="Code Block"><Code size={16} /></button>
-        <button type="button" onClick={() => insertText('[', '](url)')} style={btnStyle} title="Link"><LinkIcon size={16} /></button>
+    <div className="md-editor">
+      <div className="md-editor__bar">
+        {tools.map(([label, Icon, run]) => (
+          <button key={label} type="button" className="btn btn--ghost btn--icon btn--sm" title={label} aria-label={label} onClick={run} disabled={preview}>
+            <Icon size={15} />
+          </button>
+        ))}
+        <div className="segmented">
+          <button type="button" aria-pressed={!preview} onClick={() => setPreview(false)}>Write</button>
+          <button type="button" aria-pressed={preview} onClick={() => setPreview(true)}>Preview</button>
+        </div>
       </div>
-      <textarea
-        className="form-textarea"
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        placeholder={placeholder}
-        style={{ 
-          minHeight, 
-          borderTopLeftRadius: 0, 
-          borderTopRightRadius: 0,
-          fontFamily: "'SF Mono', 'Cascadia Code', monospace",
-          fontSize: '0.9rem'
-        }}
-      />
-      <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '4px', textAlign: 'right' }}>
-        Markdown is supported
-      </div>
+      {preview ? (
+        <div className="md-editor__preview">
+          {value.trim() ? <Markdown>{value}</Markdown> : <span className="muted">Nothing to preview</span>}
+        </div>
+      ) : (
+        <textarea id={id} ref={ref} value={value} rows={rows} placeholder={placeholder} onChange={(e) => onChange(e.target.value)} />
+      )}
     </div>
   );
 };

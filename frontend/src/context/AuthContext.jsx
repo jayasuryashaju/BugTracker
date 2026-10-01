@@ -1,132 +1,98 @@
-import { createContext, useState, useEffect, useContext } from 'react';
-import { useNavigate } from 'react-router-dom';
-import api from '../api';
-import Loader from '../components/Loader';
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import api, { tokens } from '../api';
+import { errorMessage } from '../lib/utils';
 
-const AuthContext = createContext();
+const AuthContext = createContext(null);
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [authError, setAuthError] = useState(() => sessionStorage.getItem('auth_error') || '');
-  const navigate = useNavigate();
+  const [authError, setAuthError] = useState('');
 
+  const loadUser = useCallback(async () => {
+    const res = await api.get('auth/me/');
+    setUser(res.data);
+    return res.data;
+  }, []);
+
+  const finishLogin = useCallback(async (data) => {
+    tokens.set(data);
+    return loadUser();
+  }, [loadUser]);
+
+  const login = async (username, password) => {
+    setAuthError('');
+    try {
+      const res = await api.post('auth/login/', { username, password });
+      await finishLogin(res.data);
+      return { isNew: false };
+    } catch (err) {
+      throw new Error(errorMessage(err, 'Could not sign in. Please try again.'));
+    }
+  };
+
+  const register = async (payload) => {
+    setAuthError('');
+    try {
+      const res = await api.post('auth/register/', payload);
+      await finishLogin(res.data);
+      return { isNew: true };
+    } catch (err) {
+      throw new Error(errorMessage(err, 'Could not create your account. Please try again.'));
+    }
+  };
+
+  const msLogin = useCallback(async (accessToken) => {
+    const res = await api.post('auth/microsoft/', { access_token: accessToken });
+    await finishLogin(res.data);
+    return { isNew: Boolean(res.data.is_new_user) };
+  }, [finishLogin]);
+
+  const logout = useCallback(() => {
+    tokens.clear();
+    setUser(null);
+  }, []);
+
+  // Initial session restore (or completion of a Microsoft redirect sign-in).
   useEffect(() => {
-    const initAuth = async () => {
-      // Check if we just came back from a Microsoft redirect login
+    let cancelled = false;
+    (async () => {
       const msToken = sessionStorage.getItem('ms_access_token');
       if (msToken) {
         sessionStorage.removeItem('ms_access_token');
         try {
-          await msLogin(msToken);
-          setLoading(false);
-          return;
+          const { isNew } = await msLogin(msToken);
+          if (!cancelled && isNew) sessionStorage.setItem('post_login_path', '/profile');
         } catch (err) {
-          console.error('MS auto-login failed:', err);
-          const msg = err.response?.data?.error || 'Microsoft login failed. Please try again.';
-          sessionStorage.setItem('auth_error', msg);
-          setAuthError(msg);
+          if (!cancelled) setAuthError(errorMessage(err, 'Microsoft sign-in failed. Please try again.'));
         }
-      }
-
-      // Normal check: do we have a stored JWT?
-      const token = localStorage.getItem('access_token');
-      if (token) {
-        api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+      } else if (tokens.access || tokens.refresh) {
         try {
-          const res = await api.get('auth/me/');
-          setUser(res.data);
-        } catch (err) {
-          localStorage.removeItem('access_token');
-          localStorage.removeItem('refresh_token');
-          delete api.defaults.headers.common['Authorization'];
+          await loadUser();
+        } catch {
+          tokens.clear();
         }
       }
-      setLoading(false);
-    };
-    initAuth();
+      if (!cancelled) setLoading(false);
+    })();
+    return () => { cancelled = true; };
+  }, [loadUser, msLogin]);
+
+  // The API client emits this when a session can no longer be refreshed.
+  useEffect(() => {
+    const onExpired = () => setUser(null);
+    window.addEventListener('auth:expired', onExpired);
+    return () => window.removeEventListener('auth:expired', onExpired);
   }, []);
 
-  const login = async (username, password) => {
-    setAuthError('');
-    sessionStorage.removeItem('auth_error');
-    try {
-      const res = await api.post('auth/login/', { username, password });
-      const { access, refresh } = res.data;
-      localStorage.setItem('access_token', access);
-      localStorage.setItem('refresh_token', refresh);
-      api.defaults.headers.common['Authorization'] = `Bearer ${access}`;
-      const userRes = await api.get('auth/me/');
-      setUser(userRes.data);
-      navigate('/');
-    } catch (err) {
-      const msg = err.response?.data?.detail || err.response?.data?.error || 'Invalid credentials. Please check your username and password.';
-      setAuthError(msg);
-      sessionStorage.setItem('auth_error', msg);
-      throw new Error(msg);
-    }
-  };
-
-  const register = async (userData) => {
-    setAuthError('');
-    sessionStorage.removeItem('auth_error');
-    try {
-      const res = await api.post('auth/register/', userData);
-      const { access, refresh, is_new_user } = res.data;
-      localStorage.setItem('access_token', access);
-      localStorage.setItem('refresh_token', refresh);
-      api.defaults.headers.common['Authorization'] = `Bearer ${access}`;
-      const userRes = await api.get('auth/me/');
-      setUser(userRes.data);
-      navigate('/profile');
-    } catch (err) {
-      const msg = err.response?.data?.error || 'Registration failed. Please try again.';
-      setAuthError(msg);
-      sessionStorage.setItem('auth_error', msg);
-      throw new Error(msg);
-    }
-  };
-
-  const msLogin = async (accessToken) => {
-    setAuthError('');
-    sessionStorage.removeItem('auth_error');
-    try {
-      const res = await api.post('auth/microsoft/', { access_token: accessToken });
-      const { access, refresh, is_new_user } = res.data;
-      localStorage.setItem('access_token', access);
-      localStorage.setItem('refresh_token', refresh);
-      api.defaults.headers.common['Authorization'] = `Bearer ${access}`;
-      const userRes = await api.get('auth/me/');
-      setUser(userRes.data);
-      
-      if (is_new_user) {
-        navigate('/profile');
-      } else {
-        navigate('/');
-      }
-    } catch (err) {
-      const msg = err.response?.data?.error || 'Microsoft login failed. Please try again.';
-      setAuthError(msg);
-      sessionStorage.setItem('auth_error', msg);
-      throw new Error(msg);
-    }
-  };
-
-  const logout = () => {
-    localStorage.removeItem('access_token');
-    localStorage.removeItem('refresh_token');
-    delete api.defaults.headers.common['Authorization'];
-    setUser(null);
-    setAuthError('');
-    sessionStorage.removeItem('auth_error');
-    navigate('/login');
-  };
-
-  return (
-    <AuthContext.Provider value={{ user, login, register, msLogin, logout, loading, authError, setAuthError, setUser }}>
-      {loading ? <Loader fullScreen text="Authenticating..." /> : children}
-    </AuthContext.Provider>
+  const value = useMemo(
+    () => ({ user, setUser, loading, authError, setAuthError, login, register, msLogin, logout, refreshUser: loadUser }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [user, loading, authError, msLogin, logout, loadUser],
   );
+
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };
 
+// eslint-disable-next-line react-refresh/only-export-components
 export const useAuth = () => useContext(AuthContext);

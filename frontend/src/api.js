@@ -1,51 +1,66 @@
 import axios from 'axios';
+import { API_BASE } from './lib/utils';
 
-export const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+export const BASE_URL = API_BASE;
 
-const api = axios.create({
-  baseURL: `${BASE_URL}/api/`,
+const api = axios.create({ baseURL: `${BASE_URL}/api/` });
+
+export const tokens = {
+  get access() { return localStorage.getItem('access_token'); },
+  get refresh() { return localStorage.getItem('refresh_token'); },
+  set({ access, refresh }) {
+    if (access) localStorage.setItem('access_token', access);
+    if (refresh) localStorage.setItem('refresh_token', refresh);
+  },
+  clear() {
+    localStorage.removeItem('access_token');
+    localStorage.removeItem('refresh_token');
+  },
+};
+
+api.interceptors.request.use((config) => {
+  const token = tokens.access;
+  if (token) config.headers.Authorization = `Bearer ${token}`;
+  return config;
 });
 
-// Attach access token automatically on request
-api.interceptors.request.use((config) => {
-  const token = localStorage.getItem('access_token');
-  if (token) {
-    config.headers['Authorization'] = `Bearer ${token}`;
+// Concurrent 401s share one refresh request instead of racing (refresh tokens rotate).
+let refreshing = null;
+const refreshAccessToken = () => {
+  if (!refreshing) {
+    refreshing = axios
+      .post(`${BASE_URL}/api/auth/refresh/`, { refresh: tokens.refresh })
+      .then((res) => {
+        tokens.set(res.data);
+        return res.data.access;
+      })
+      .finally(() => { refreshing = null; });
   }
-  return config;
-}, (error) => Promise.reject(error));
+  return refreshing;
+};
 
-// Handle 401 Token Expiration with Refresh Token
+const isAuthEndpoint = (url = '') => /^\/?auth\/(login|register|microsoft|refresh)\//.test(url);
+
 api.interceptors.response.use(
   (response) => response,
   async (error) => {
-    const originalRequest = error.config;
-    if (error.response?.status === 401 && !originalRequest._retry) {
-      originalRequest._retry = true;
-      const refreshToken = localStorage.getItem('refresh_token');
-      if (refreshToken) {
+    const original = error.config;
+    if (error.response?.status === 401 && original && !original._retry && !isAuthEndpoint(original.url)) {
+      original._retry = true;
+      if (tokens.refresh) {
         try {
-          const res = await axios.post(`${BASE_URL}/api/auth/refresh/`, {
-            refresh: refreshToken,
-          });
-          const newAccessToken = res.data.access;
-          localStorage.setItem('access_token', newAccessToken);
-          if (res.data.refresh) {
-            localStorage.setItem('refresh_token', res.data.refresh);
-          }
-          api.defaults.headers.common['Authorization'] = `Bearer ${newAccessToken}`;
-          originalRequest.headers['Authorization'] = `Bearer ${newAccessToken}`;
-          return api(originalRequest);
-        } catch (refreshErr) {
-          localStorage.removeItem('access_token');
-          localStorage.removeItem('refresh_token');
-          window.location.href = '/login';
-          return Promise.reject(refreshErr);
+          const access = await refreshAccessToken();
+          original.headers.Authorization = `Bearer ${access}`;
+          return api(original);
+        } catch {
+          // fall through to logout
         }
       }
+      tokens.clear();
+      window.dispatchEvent(new Event('auth:expired'));
     }
     return Promise.reject(error);
-  }
+  },
 );
 
 export default api;

@@ -1,754 +1,430 @@
-import Loader from '../components/Loader';
-import { useState, useEffect } from 'react';
-import { useParams, Link } from 'react-router-dom';
-import { useAuth } from '../context/AuthContext';
-import api from '../api';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import {
-  ArrowLeft, Download, Send, Calendar, User, FileText, Image as ImageIcon, Video, X, Activity, AlertCircle, Clock, Link as LinkIcon, Reply, MessageSquare
+  AlertTriangle, Clock, Download, FileText, Link2, MessageSquare, Pencil, Reply, Send, Trash2, Upload, X, Activity as ActivityIcon, Paperclip,
 } from 'lucide-react';
-import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
-import MarkdownEditor from '../components/MarkdownEditor';
+import toast from 'react-hot-toast';
+import api from '../api';
+import { useAuth } from '../context/AuthContext';
+import { useBugEvents } from '../context/NotificationsContext';
+import { errorMessage, fileUrl, formatDate, fullName, isOverdue, PRIORITIES, STATUSES, timeAgo, unwrap } from '../lib/utils';
+import MarkdownEditor, { Markdown } from '../components/MarkdownEditor';
+import { Avatar, ConfirmDialog, EmptyState, PageLoader, PriorityBadge, RoleBadge, StatusBadge } from '../components/ui';
 
-const COMMENT_USER_PALETTES = [
-  {
-    border: '#6366f1',
-    gradient: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
-    lightBg: 'rgba(99, 102, 241, 0.10)',
-    text: '#818cf8',
-    glow: 'rgba(99, 102, 241, 0.25)',
-  },
-  {
-    border: '#10b981',
-    gradient: 'linear-gradient(135deg, #10b981, #059669)',
-    lightBg: 'rgba(16, 185, 129, 0.10)',
-    text: '#34d399',
-    glow: 'rgba(16, 185, 129, 0.25)',
-  },
-  {
-    border: '#f59e0b',
-    gradient: 'linear-gradient(135deg, #f59e0b, #d97706)',
-    lightBg: 'rgba(245, 158, 11, 0.10)',
-    text: '#fbbf24',
-    glow: 'rgba(245, 158, 11, 0.25)',
-  },
-  {
-    border: '#ec4899',
-    gradient: 'linear-gradient(135deg, #ec4899, #db2777)',
-    lightBg: 'rgba(236, 72, 153, 0.10)',
-    text: '#f472b6',
-    glow: 'rgba(236, 72, 153, 0.25)',
-  },
-  {
-    border: '#06b6d4',
-    gradient: 'linear-gradient(135deg, #06b6d4, #0284c7)',
-    lightBg: 'rgba(6, 182, 212, 0.10)',
-    text: '#22d3ee',
-    glow: 'rgba(6, 182, 212, 0.25)',
-  },
-  {
-    border: '#a855f7',
-    gradient: 'linear-gradient(135deg, #a855f7, #7c3aed)',
-    lightBg: 'rgba(168, 85, 247, 0.10)',
-    text: '#c084fc',
-    glow: 'rgba(168, 85, 247, 0.25)',
-  },
-  {
-    border: '#f97316',
-    gradient: 'linear-gradient(135deg, #f97316, #ea580c)',
-    lightBg: 'rgba(249, 115, 22, 0.10)',
-    text: '#fb923c',
-    glow: 'rgba(249, 115, 22, 0.25)',
-  },
-  {
-    border: '#14b8a6',
-    gradient: 'linear-gradient(135deg, #14b8a6, #0d9488)',
-    lightBg: 'rgba(20, 184, 166, 0.10)',
-    text: '#2dd4bf',
-    glow: 'rgba(20, 184, 166, 0.25)',
-  },
-];
+const isImage = (name) => /\.(jpe?g|png|webp|gif|bmp|avif)$/i.test(name);
+const isVideo = (name) => /\.(mp4|webm|ogg|mov)$/i.test(name);
 
-const getUserPalette = (userObj) => {
-  if (!userObj) return COMMENT_USER_PALETTES[0];
-  const key = (userObj.username || userObj.email || (typeof userObj === 'string' ? userObj : 'User')).toLowerCase();
-  let hash = 0;
-  for (let i = 0; i < key.length; i++) {
-    hash = key.charCodeAt(i) + ((hash << 5) - hash);
-  }
-  const index = Math.abs(hash) % COMMENT_USER_PALETTES.length;
-  return COMMENT_USER_PALETTES[index];
-};
+const Card = ({ icon: Icon, title, extra, children }) => (
+  <section className="card">
+    <div className="card__head">{Icon && <Icon size={16} style={{ color: 'var(--text-3)' }} />}<h2>{title}</h2>{extra && <span className="spacer muted">{extra}</span>}</div>
+    <div className="card__body">{children}</div>
+  </section>
+);
 
-const getRoleBadgeConfig = (role) => {
-  switch (role) {
-    case 'Admin':
-      return { label: 'Admin', color: '#ef4444', bg: 'rgba(239, 68, 68, 0.12)', border: 'rgba(239, 68, 68, 0.3)' };
-    case 'Manager':
-      return { label: 'Manager', color: '#f59e0b', bg: 'rgba(245, 158, 11, 0.12)', border: 'rgba(245, 158, 11, 0.3)' };
-    case 'Tester':
-      return { label: 'Tester', color: '#10b981', bg: 'rgba(16, 185, 129, 0.12)', border: 'rgba(16, 185, 129, 0.3)' };
-    case 'Developer':
-      return { label: 'Dev', color: '#6366f1', bg: 'rgba(99, 102, 241, 0.12)', border: 'rgba(99, 102, 241, 0.3)' };
-    default:
-      return null;
-  }
-};
+const Prop = ({ label, children }) => <div className="prop"><span>{label}</span><div style={{ minWidth: 0 }}>{children}</div></div>;
 
-const formatCommentTime = (dateString) => {
-  if (!dateString) return '';
-  const date = new Date(dateString);
-  const now = new Date();
-  const diffMinutes = Math.floor((now - date) / 60000);
-  if (diffMinutes < 1) return 'Just now';
-  if (diffMinutes < 60) return `${diffMinutes}m ago`;
-  
-  const isToday = date.toDateString() === now.toDateString();
-  const timeStr = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-  if (isToday) return `Today at ${timeStr}`;
-  
-  const yesterday = new Date();
-  yesterday.setDate(yesterday.getDate() - 1);
-  if (date.toDateString() === yesterday.toDateString()) return `Yesterday at ${timeStr}`;
+/* ---------- comments ---------- */
+const CommentItem = ({ comment, me, canModerate, depth, onReply, onChanged }) => {
+  const [editing, setEditing] = useState(false);
+  const [text, setText] = useState(comment.content);
+  const [confirm, setConfirm] = useState(false);
+  const mine = comment.author?.id === me.id;
 
-  return `${date.toLocaleDateString([], { month: 'short', day: 'numeric' })} at ${timeStr}`;
-};
-
-const statusBadgeClass = (status) => {
-  const map = {
-    'Open': 'badge--open',
-    'In Progress': 'badge--inprogress',
-    'Resolved': 'badge--resolved',
-    'Closed': 'badge--closed',
-  };
-  return map[status] || '';
-};
-
-const priorityBadgeClass = (priority) => {
-  const map = {
-    'Low': 'badge--low',
-    'Medium': 'badge--medium',
-    'High': 'badge--high',
-    'Critical': 'badge--critical',
-  };
-  return map[priority] || '';
-};
-
-const BugDetail = () => {
-  const { id } = useParams();
-  const { user } = useAuth();
-  const [bug, setBug] = useState(null);
-  const [comment, setComment] = useState('');
-  const [replyTo, setReplyTo] = useState(null);
-  const [submitting, setSubmitting] = useState(false);
-  const [activeMedia, setActiveMedia] = useState(null); // Lightbox modal state
-  const [workHours, setWorkHours] = useState('');
-  const [workNote, setWorkNote] = useState('');
-  const [availableBugs, setAvailableBugs] = useState([]);
-  const [selectedLinkBug, setSelectedLinkBug] = useState('');
-
-  const fetchBug = () => {
-    api.get(`bugs/${id}/`).then(res => setBug(res.data)).catch(err => console.error(err));
-  };
-
-  useEffect(() => { 
-    fetchBug(); 
-    const handleBugEvent = (e) => {
-      if (e.detail?.bug?.id === id) {
-        fetchBug();
-      }
-    };
-    window.addEventListener('ws_bug_event', handleBugEvent);
-    return () => window.removeEventListener('ws_bug_event', handleBugEvent);
-  }, [id]);
-
-  useEffect(() => {
-    if (bug) {
-      document.title = `${bug.display_id ? `[${bug.display_id}] ` : ''}${bug.title} | BugTracker Pro`;
-    }
-  }, [bug]);
-
-  const handleStatusChange = async (newStatus) => {
-    await api.patch(`bugs/${id}/`, { status: newStatus });
-    fetchBug();
-  };
-
-  const handleAddComment = async (e) => {
-    e.preventDefault();
-    if (!comment.trim()) return;
-    setSubmitting(true);
+  const save = async () => {
     try {
-      const payload = { bug: id, content: comment };
-      if (replyTo) payload.parent = replyTo;
-      await api.post('comments/', payload);
-      setComment('');
-      setReplyTo(null);
-      fetchBug();
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setSubmitting(false);
-    }
+      await api.patch(`comments/${comment.id}/`, { content: text });
+      setEditing(false);
+      onChanged();
+    } catch (err) { toast.error(errorMessage(err)); }
   };
-
-  const handleLogWork = async (e) => {
-    e.preventDefault();
-    if (!workHours) return;
-    try {
-      await api.post('worklogs/', { bug: id, hours: workHours, note: workNote });
-      setWorkHours('');
-      setWorkNote('');
-      fetchBug();
-    } catch (err) {
-      console.error(err);
-    }
+  const remove = async () => {
+    try { await api.delete(`comments/${comment.id}/`); onChanged(); } catch (err) { toast.error(errorMessage(err)); }
+    setConfirm(false);
   };
-
-  const handleLinkBug = async () => {
-    if (!selectedLinkBug) return;
-    try {
-      const newLinkedIds = [...bug.linked_bugs_detail.map(b => b.id), selectedLinkBug];
-      await api.patch(`bugs/${id}/`, { linked_bug_ids: newLinkedIds });
-      setSelectedLinkBug('');
-      fetchBug();
-    } catch (err) {
-      console.error(err);
-    }
-  };
-
-  useEffect(() => {
-    if (bug && bug.project) {
-        api.get(`bugs/?project=${bug.project}`).then(res => setAvailableBugs(res.data.results || res.data)).catch(() => {});
-    }
-  }, [bug]);
-
-  if (!bug) return <Loader fullScreen />;
-
-  const createdBy = bug.created_by
-    ? `${bug.created_by.first_name || ''} ${bug.created_by.last_name || ''}`.trim() || bug.created_by.username
-    : 'Unknown';
-
-  const assignedTo = bug.assigned_to
-    ? `${bug.assigned_to.first_name || ''} ${bug.assigned_to.last_name || ''}`.trim() || bug.assigned_to.username
-    : 'Unassigned';
-
-  const isImage = (filename) => /\.(jpg|jpeg|png|webp|gif|svg)$/i.test(filename);
-  const isVideo = (filename) => /\.(mp4|webm|ogg|mov)$/i.test(filename);
-
-  const isOverdue = bug.due_date && new Date(bug.due_date) < new Date(new Date().setHours(0,0,0,0)) && !['Resolved', 'Closed'].includes(bug.status);
-
-  const replyingToAuthor = (() => {
-    if (!replyTo || !bug || !bug.comments) return 'thread';
-    const allComments = bug.comments.flatMap(c => [c, ...(c.replies || [])]);
-    const target = allComments.find(c => c.id === replyTo);
-    if (!target) return 'thread';
-    return `${target.author?.first_name || ''} ${target.author?.last_name || ''}`.trim() || target.author?.username || 'User';
-  })();
 
   return (
     <div>
-      {/* Lightbox Image Preview Modal */}
-      {activeMedia && (
-        <div
-          style={{
-            position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-            backgroundColor: 'rgba(0,0,0,0.85)', zIndex: 9999,
-            display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px'
-          }}
-          onClick={() => setActiveMedia(null)}
-        >
-          <button
-            onClick={() => setActiveMedia(null)}
-            style={{ position: 'absolute', top: 20, right: 20, background: 'none', border: 'none', color: '#fff', cursor: 'pointer' }}
-          >
-            <X size={28} />
-          </button>
-          <img
-            src={activeMedia}
-            alt="Preview"
-            style={{ maxWidth: '90vw', maxHeight: '85vh', borderRadius: 'var(--radius-md)', boxShadow: '0 8px 32px rgba(0,0,0,0.5)' }}
-            onClick={e => e.stopPropagation()}
-          />
-        </div>
-      )}
-
-      {isOverdue && (
-        <div style={{ backgroundColor: 'var(--status-critical)', color: 'white', padding: '12px 16px', borderRadius: 'var(--radius-md)', marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 600 }}>
-          <AlertCircle size={18} />
-          This bug is overdue! Target resolution date was {new Date(bug.due_date).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}.
-        </div>
-      )}
-
-      {/* Page Header */}
-      <div className="page-header">
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <Link to="/bugs" className="btn btn--ghost"><ArrowLeft size={18} /></Link>
-          <div>
-            <h1 className="page-header__title">{bug.title}</h1>
-            <p className="page-header__subtitle" style={{ fontFamily: "'SF Mono', 'Cascadia Code', monospace" }}>
-              {bug.display_id}
-            </p>
+      <div className="comment">
+        <Avatar user={comment.author} size="md" />
+        <div className="comment__body">
+          <div className="comment__meta">
+            <b>{fullName(comment.author) || 'Unknown'}</b>
+            {mine && <span className="badge badge--accent badge--plain">You</span>}
+            {comment.author?.profile?.role && <RoleBadge role={comment.author.profile.role} />}
+            <span className="muted" title={new Date(comment.created_at).toLocaleString()}>{timeAgo(comment.created_at)}</span>
+            <span className="comment__actions">
+              {depth === 0 && <button className="btn btn--ghost btn--sm" onClick={() => onReply(comment)}><Reply size={13} /> Reply</button>}
+              {(mine || canModerate) && !editing && (
+                <>
+                  {mine && <button className="btn btn--ghost btn--icon btn--sm" aria-label="Edit comment" onClick={() => setEditing(true)}><Pencil size={13} /></button>}
+                  <button className="btn btn--ghost btn--icon btn--sm" aria-label="Delete comment" onClick={() => setConfirm(true)}><Trash2 size={13} /></button>
+                </>
+              )}
+            </span>
           </div>
-        </div>
-        <div className="page-header__actions">
-          <select
-            className="form-select"
-            style={{ width: 'auto', padding: '8px 36px 8px 12px' }}
-            value={bug.status}
-            onChange={e => handleStatusChange(e.target.value)}
-          >
-            <option value="Open">Open</option>
-            <option value="In Progress">In Progress</option>
-            <option value="Resolved">Resolved</option>
-            <option value="Closed">Closed</option>
-          </select>
+          {editing ? (
+            <div className="stack" style={{ gap: 8 }}>
+              <textarea className="textarea" value={text} onChange={(e) => setText(e.target.value)} rows={3} autoFocus />
+              <div className="row" style={{ justifyContent: 'flex-end' }}>
+                <button className="btn btn--secondary btn--sm" onClick={() => { setEditing(false); setText(comment.content); }}>Cancel</button>
+                <button className="btn btn--primary btn--sm" disabled={!text.trim()} onClick={save}>Save</button>
+              </div>
+            </div>
+          ) : <Markdown>{comment.content}</Markdown>}
         </div>
       </div>
-
-      {/* Detail Layout */}
-      <div className="detail-layout">
-        {/* Left: Main Content */}
-        <div className="flex-col gap-4" style={{ display: 'flex' }}>
-          {/* Status & Priority Badges */}
-          <div className="flex gap-3 flex-wrap">
-            <span className={`badge ${statusBadgeClass(bug.status)}`}>
-              <span className="badge__dot"></span> {bug.status}
-            </span>
-            <span className={`badge ${priorityBadgeClass(bug.priority)}`}>
-              {bug.priority} Priority
-            </span>
-            {bug.tags_detail && bug.tags_detail.map(tag => (
-              <span key={tag.id} className="badge" style={{ backgroundColor: tag.color + '20', color: tag.color, border: `1px solid ${tag.color}` }}>
-                {tag.name}
-              </span>
-            ))}
-          </div>
-
-          {/* Description */}
-          <div className="card">
-            <div className="card__header">
-              <span className="card__title">Description</span>
-            </div>
-            <div className="card__body">
-              <div className="detail__description markdown-content">
-                <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                  {bug.description}
-                </ReactMarkdown>
-              </div>
-            </div>
-          </div>
-
-          {/* Steps to Reproduce */}
-          {bug.steps_to_reproduce && (
-            <div className="card">
-              <div className="card__header">
-                <span className="card__title">Steps to Reproduce</span>
-              </div>
-              <div className="card__body">
-                <div className="detail__description markdown-content" style={{ backgroundColor: 'var(--bg-base)', padding: '16px', borderRadius: 'var(--radius-md)' }}>
-                  <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                    {bug.steps_to_reproduce}
-                  </ReactMarkdown>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* User-Friendly Attachments Media Gallery */}
-          {bug.attachments && bug.attachments.length > 0 && (
-            <div className="card">
-              <div className="card__header">
-                <span className="card__title">Attachments & Media ({bug.attachments.length})</span>
-              </div>
-              <div className="card__body">
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                  {bug.attachments.map(att => {
-                    const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000';
-                    const fileUrl = att.file.startsWith('http') ? att.file : `${baseUrl}${att.file}`;
-                    const fileName = att.file.split('/').pop();
-
-                    if (isImage(fileName)) {
-                      return (
-                        <div key={att.id} style={{ border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', padding: '12px', background: 'var(--bg-base)' }}>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-                            <span className="flex items-center gap-1"><ImageIcon size={14} /> {fileName}</span>
-                            <a href={fileUrl} target="_blank" rel="noreferrer" download style={{ color: 'var(--accent)', textDecoration: 'none' }} className="flex items-center gap-1">
-                              <Download size={12} /> Download
-                            </a>
-                          </div>
-                          <img
-                            src={fileUrl}
-                            alt={fileName}
-                            onClick={() => setActiveMedia(fileUrl)}
-                            style={{ width: '100%', maxHeight: '320px', objectFit: 'cover', borderRadius: 'var(--radius-sm)', cursor: 'pointer', border: '1px solid var(--border)' }}
-                          />
-                        </div>
-                      );
-                    } else if (isVideo(fileName)) {
-                      return (
-                        <div key={att.id} style={{ border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', padding: '12px', background: 'var(--bg-base)' }}>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-                            <span className="flex items-center gap-1"><Video size={14} /> Screen Recording Video ({fileName})</span>
-                            <a href={fileUrl} target="_blank" rel="noreferrer" download style={{ color: 'var(--accent)', textDecoration: 'none' }} className="flex items-center gap-1">
-                              <Download size={12} /> Download
-                            </a>
-                          </div>
-                          <video
-                            controls
-                            src={fileUrl}
-                            style={{ width: '100%', maxHeight: '380px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border)', backgroundColor: '#000' }}
-                          />
-                        </div>
-                      );
-                    } else {
-                      return (
-                        <div key={att.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', background: 'var(--bg-base)' }}>
-                          <span className="flex items-center gap-2" style={{ fontSize: '0.85rem' }}>
-                            <FileText size={16} /> {fileName}
-                          </span>
-                          <a href={fileUrl} target="_blank" rel="noreferrer" download className="btn btn--secondary btn--sm">
-                            <Download size={14} /> Download
-                          </a>
-                        </div>
-                      );
-                    }
-                  })}
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Meta Info */}
-          <div className="detail__meta-grid">
-            <div className="detail__meta-item">
-              <div className="detail__meta-label">Created by</div>
-              <div className="detail__meta-value flex items-center gap-2">
-                <User size={14} style={{ color: 'var(--text-dim)' }} /> {createdBy}
-              </div>
-            </div>
-            <div className="detail__meta-item">
-              <div className="detail__meta-label">Assigned to</div>
-              <div className="detail__meta-value flex items-center gap-2">
-                <User size={14} style={{ color: 'var(--text-dim)' }} /> {assignedTo}
-              </div>
-            </div>
-            <div className="detail__meta-item">
-              <div className="detail__meta-label">Created</div>
-              <div className="detail__meta-value flex items-center gap-2">
-                <Calendar size={14} style={{ color: 'var(--text-dim)' }} />
-                {new Date(bug.created_at).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
-              </div>
-            </div>
-            <div className="detail__meta-item">
-              <div className="detail__meta-label">Target Due Date</div>
-              <div className="detail__meta-value flex items-center gap-2">
-                <Calendar size={14} style={{ color: 'var(--status-critical)' }} />
-                <input 
-                  type="date"
-                  style={{ background: 'transparent', border: 'none', color: isOverdue ? 'var(--status-critical)' : 'inherit', fontSize: 'inherit', fontFamily: 'inherit', padding: 0, outline: 'none', cursor: 'pointer', fontWeight: isOverdue ? 600 : 'normal' }}
-                  value={bug.due_date || ''}
-                  onChange={async (e) => {
-                    try {
-                      await api.patch(`bugs/${bug.id}/`, { due_date: e.target.value || null });
-                      fetchBug();
-                    } catch (err) {
-                      console.error(err);
-                    }
-                  }}
-                />
-              </div>
-            </div>
-            <div className="detail__meta-item">
-              <div className="detail__meta-label">Last Updated</div>
-              <div className="detail__meta-value flex items-center gap-2">
-                <Calendar size={14} style={{ color: 'var(--text-dim)' }} />
-                {new Date(bug.updated_at).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
-              </div>
-            </div>
-          </div>
-
-          {/* Linked Bugs */}
-          <div className="card" style={{ marginTop: '24px' }}>
-            <div className="card__header">
-              <span className="card__title flex items-center gap-2"><LinkIcon size={16} /> Linked Issues</span>
-            </div>
-            <div className="card__body">
-              {bug.linked_bugs_detail && bug.linked_bugs_detail.length > 0 && (
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginBottom: '12px' }}>
-                  {bug.linked_bugs_detail.map(lb => (
-                    <Link key={lb.id} to={`/bugs/${lb.id}`} className="badge" style={{ backgroundColor: 'var(--bg-active)', color: 'var(--text-primary)', border: '1px solid var(--border)', textDecoration: 'none' }}>
-                      <span className="badge__dot" style={{ backgroundColor: 'var(--status-open)' }}></span> {lb.title}
-                    </Link>
-                  ))}
-                </div>
-              )}
-              <div style={{ display: 'flex', gap: '8px' }}>
-                <select className="form-input" style={{ flex: 1, padding: '6px' }} value={selectedLinkBug} onChange={e => setSelectedLinkBug(e.target.value)}>
-                  <option value="">Link a related issue...</option>
-                  {availableBugs.filter(b => b.id !== bug.id && !bug.linked_bugs_detail?.find(lb => lb.id === b.id)).map(b => (
-                    <option key={b.id} value={b.id}>{b.title}</option>
-                  ))}
-                </select>
-                <button type="button" className="btn btn--secondary btn--sm" onClick={handleLinkBug}>Link</button>
-              </div>
-            </div>
-          </div>
-
-          {/* Work Logs */}
-          <div className="card" style={{ marginTop: '24px' }}>
-            <div className="card__header flex justify-between items-center">
-              <span className="card__title flex items-center gap-2"><Clock size={16} /> Time Tracking</span>
-              <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
-                Total: <strong style={{ color: 'var(--text-primary)' }}>{(bug.work_logs?.reduce((sum, log) => sum + parseFloat(log.hours), 0) || 0).toFixed(2)}h</strong>
-              </span>
-            </div>
-            <div className="card__body">
-              {bug.work_logs && bug.work_logs.length > 0 && (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '16px' }}>
-                  {bug.work_logs.map(log => (
-                    <div key={log.id} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', padding: '8px', backgroundColor: 'var(--bg-base)', borderRadius: 'var(--radius-sm)' }}>
-                      <span>
-                        <strong>{log.user.username}</strong> logged {log.hours}h
-                        {log.note && <span style={{ color: 'var(--text-muted)' }}> - {log.note}</span>}
-                      </span>
-                      <span style={{ color: 'var(--text-dim)' }}>{new Date(log.created_at).toLocaleDateString()}</span>
-                    </div>
-                  ))}
-                </div>
-              )}
-              <form onSubmit={handleLogWork} style={{ display: 'flex', gap: '8px' }}>
-                <input type="number" step="0.1" min="0.1" className="form-input" placeholder="Hours (e.g. 1.5)" style={{ width: '120px', padding: '6px' }} value={workHours} onChange={e => setWorkHours(e.target.value)} required />
-                <input type="text" className="form-input" placeholder="Note (optional)" style={{ flex: 1, padding: '6px' }} value={workNote} onChange={e => setWorkNote(e.target.value)} />
-                <button type="submit" className="btn btn--primary btn--sm">Log Time</button>
-              </form>
-            </div>
-          </div>
-
-          {/* Activity Log */}
-          {bug.activity_logs && bug.activity_logs.length > 0 && (
-            <div className="card" style={{ marginTop: '24px' }}>
-              <div className="card__header">
-                <span className="card__title flex items-center gap-2" style={{ display: 'flex' }}><Activity size={16} /> Audit Timeline</span>
-              </div>
-              <div className="card__body">
-                <div className="activity-timeline" style={{ display: 'flex', flexDirection: 'column', gap: '16px', position: 'relative', paddingLeft: '16px', borderLeft: '2px solid var(--border)' }}>
-                  {bug.activity_logs.map(log => {
-                    const actorName = log.actor ? log.actor.username : 'System';
-                    return (
-                      <div key={log.id} style={{ position: 'relative' }}>
-                        <div style={{ position: 'absolute', left: '-22.5px', top: '4px', width: '10px', height: '10px', borderRadius: '50%', background: 'var(--accent)', outline: '3px solid var(--bg-surface)' }}></div>
-                        <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '4px' }}>
-                          <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{actorName}</span> • {new Date(log.created_at).toLocaleString()}
-                        </div>
-                        <div style={{ fontSize: '0.9rem' }}>
-                          {log.action}
-                          {log.old_value || log.new_value ? (
-                            <span style={{ color: 'var(--text-dim)', marginLeft: '8px' }}>
-                              ({log.old_value || 'None'} → {log.new_value})
-                            </span>
-                          ) : null}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            </div>
-          )}
-
+      {comment.replies?.length > 0 && (
+        <div className="replies">
+          {comment.replies.map((r) => (
+            <CommentItem key={r.id} comment={r} me={me} canModerate={canModerate} depth={depth + 1} onReply={onReply} onChanged={onChanged} />
+          ))}
         </div>
+      )}
+      {confirm && <ConfirmDialog danger title="Delete comment" message="This comment (and its replies) will be permanently removed." confirmLabel="Delete" onConfirm={remove} onCancel={() => setConfirm(false)} />}
+    </div>
+  );
+};
 
-        {/* Right: Comments Panel */}
-        <div className="card" style={{ position: 'sticky', top: '28px' }}>
-          <div className="card__header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span className="card__title flex items-center gap-2">
-              <MessageSquare size={16} style={{ color: 'var(--accent)' }} />
-              Comments ({bug.comments?.reduce((acc, c) => acc + 1 + (c.replies?.length || 0), 0) || 0})
-            </span>
-          </div>
-          <div className="card__body" style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-            {/* Comment List */}
-            {bug.comments && bug.comments.length > 0 ? (
-              <div className="comment-list" style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                {bug.comments.map(c => {
-                  const renderComment = (commentObj, isReply = false, parentAuthorName = null) => {
-                    const authorName = commentObj.author 
-                      ? `${commentObj.author.first_name || ''} ${commentObj.author.last_name || ''}`.trim() || commentObj.author.username 
-                      : 'Unknown';
-                    const authorInitial = (commentObj.author?.first_name?.[0] || commentObj.author?.username?.[0] || authorName[0] || '?').toUpperCase();
-                    const isCurrentUser = user && commentObj.author && (commentObj.author.username === user.username || commentObj.author.id === user.id);
-                    const palette = getUserPalette(commentObj.author);
-                    const roleBadge = getRoleBadgeConfig(commentObj.author?.profile?.role);
+/* ---------- page ---------- */
+const BugDetail = () => {
+  const { id } = useParams();
+  const { user } = useAuth();
+  const navigate = useNavigate();
+  const [bug, setBug] = useState(null);
+  const [notFound, setNotFound] = useState(false);
+  const [people, setPeople] = useState([]);
+  const [projects, setProjects] = useState([]);
+  const [allTags, setAllTags] = useState([]);
+  const [title, setTitle] = useState('');
+  const [editDesc, setEditDesc] = useState(false);
+  const [descDraft, setDescDraft] = useState({ description: '', steps: '' });
+  const [comment, setComment] = useState('');
+  const [replyTo, setReplyTo] = useState(null);
+  const [posting, setPosting] = useState(false);
+  const [hours, setHours] = useState('');
+  const [note, setNote] = useState('');
+  const [linkQuery, setLinkQuery] = useState('');
+  const [linkResults, setLinkResults] = useState([]);
+  const [lightbox, setLightbox] = useState(null);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const fileInput = useRef(null);
 
-                    return (
-                      <div key={commentObj.id} style={{ width: '100%' }}>
-                        <div 
-                          className="comment-card" 
-                          style={{
-                            borderLeft: `3px solid ${palette.border}`,
-                            background: 'var(--bg-elevated)',
-                            padding: '12px 14px',
-                            borderRadius: 'var(--radius-md)'
-                          }}
-                        >
-                          {/* Sleek Compact Single-Line Header */}
-                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px', gap: '8px' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', minWidth: 0, flexWrap: 'wrap' }}>
-                              {/* Compact Avatar with distinct color */}
-                              <div 
-                                style={{
-                                  width: '22px', 
-                                  height: '22px', 
-                                  borderRadius: '50%', 
-                                  background: palette.gradient,
-                                  color: '#ffffff',
-                                  display: 'flex',
-                                  alignItems: 'center',
-                                  justifyContent: 'center',
-                                  fontWeight: 700,
-                                  fontSize: '0.68rem',
-                                  flexShrink: 0
-                                }}
-                              >
-                                {authorInitial}
-                              </div>
+  const role = user?.profile?.role;
+  const isManager = role === 'Admin' || role === 'Manager' || user?.is_superuser;
+  const canEdit = bug && (isManager || role === 'Tester' || bug.created_by?.id === user.id || bug.assigned_to?.id === user.id);
 
-                              {/* Author Name */}
-                              <span style={{ fontWeight: 600, color: 'var(--text-primary)', fontSize: '0.8rem' }}>
-                                {authorName}
-                              </span>
-                              
-                              {/* You Badge */}
-                              {isCurrentUser && (
-                                <span className="badge--you" style={{ padding: '1px 5px', fontSize: '0.62rem' }}>You</span>
-                              )}
+  const load = useCallback(async () => {
+    try {
+      const res = await api.get(`bugs/${id}/`);
+      setBug(res.data);
+      setTitle((t) => (document.activeElement?.id === 'bug-title' ? t : res.data.title));
+      setNotFound(false);
+    } catch (err) {
+      if (err.response?.status === 404) setNotFound(true);
+      else toast.error(errorMessage(err, 'Could not load this bug.'));
+    }
+  }, [id]);
 
-                              {/* Role Badge */}
-                              {roleBadge && (
-                                <span 
-                                  style={{ 
-                                    fontSize: '0.62rem', 
-                                    fontWeight: 600, 
-                                    padding: '1px 5px', 
-                                    borderRadius: 'var(--radius-full)', 
-                                    background: roleBadge.bg, 
-                                    color: roleBadge.color, 
-                                    border: `1px solid ${roleBadge.border}` 
-                                  }}
-                                >
-                                  {roleBadge.label}
-                                </span>
-                              )}
+  useEffect(() => { setBug(null); load(); }, [load]);
+  useBugEvents((event) => { if (event.bug?.id === id) load(); });
 
-                              {/* Replying indicator if nested */}
-                              {isReply && parentAuthorName && (
-                                <span style={{ fontSize: '0.7rem', color: 'var(--text-dim)', display: 'inline-flex', alignItems: 'center', gap: '2px' }}>
-                                  ↳ @{parentAuthorName}
-                                </span>
-                              )}
+  useEffect(() => {
+    Promise.allSettled([api.get('users/', { params: { page_size: 500 } }), api.get('projects/', { params: { page_size: 500 } }), api.get('tags/')]).then(([u, p, t]) => {
+      if (u.status === 'fulfilled') setPeople(unwrap(u.value));
+      if (p.status === 'fulfilled') setProjects(unwrap(p.value));
+      if (t.status === 'fulfilled') setAllTags(unwrap(t.value));
+    });
+  }, []);
 
-                              {/* Dot separator & Timestamp */}
-                              <span style={{ color: 'var(--text-dim)', fontSize: '0.65rem' }}>•</span>
-                              <span style={{ fontSize: '0.7rem', color: 'var(--text-dim)' }}>
-                                {formatCommentTime(commentObj.created_at)}
-                              </span>
-                            </div>
+  useEffect(() => {
+    if (!lightbox) return undefined;
+    const onKey = (e) => { if (e.key === 'Escape') setLightbox(null); };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [lightbox]);
 
-                            {/* Reply Button */}
-                            {!isReply && (
-                              <button 
-                                type="button" 
-                                onClick={() => setReplyTo(commentObj.id)} 
-                                className="comment-reply-btn"
-                                title="Reply to comment"
-                                style={{ padding: '2px 6px', fontSize: '0.72rem' }}
-                              >
-                                <Reply size={12} /> Reply
-                              </button>
-                            )}
-                          </div>
+  useEffect(() => { if (bug) document.title = `${bug.display_id} ${bug.title} · BugTracker Pro`; }, [bug?.display_id, bug?.title]); // eslint-disable-line react-hooks/exhaustive-deps
 
-                          {/* Comment Content (Primary Focus) */}
-                          <div className="markdown-content" style={{ fontSize: '0.92rem', color: 'var(--text-primary)', lineHeight: '1.55' }}>
-                            <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                              {commentObj.content}
-                            </ReactMarkdown>
-                          </div>
-                        </div>
+  // Linked-issue search
+  useEffect(() => {
+    if (linkQuery.trim().length < 2) { setLinkResults([]); return undefined; }
+    const timer = setTimeout(() => {
+      api.get('bugs/', { params: { search: linkQuery.trim(), page_size: 8 } }).then((res) => setLinkResults(unwrap(res))).catch(() => {});
+    }, 250);
+    return () => clearTimeout(timer);
+  }, [linkQuery]);
 
-                        {/* Nested Replies */}
-                        {commentObj.replies && commentObj.replies.length > 0 && (
-                          <div style={{ 
-                            display: 'flex', 
-                            flexDirection: 'column', 
-                            gap: '8px', 
-                            width: '100%', 
-                            marginTop: '8px',
-                            marginLeft: '16px',
-                            paddingLeft: '12px',
-                            borderLeft: '2px solid var(--border)'
-                          }}>
-                            {commentObj.replies.map(r => renderComment(r, true, authorName))}
-                          </div>
-                        )}
-                      </div>
-                    );
-                  };
-                  return renderComment(c);
-                })}
+  const patch = async (changes, success) => {
+    try {
+      const res = await api.patch(`bugs/${id}/`, changes);
+      setBug(res.data);
+      if (success) toast.success(success);
+      return true;
+    } catch (err) {
+      toast.error(errorMessage(err, 'Could not save that change.'));
+      load();
+      return false;
+    }
+  };
+
+  const saveTitle = async () => {
+    const next = title.trim();
+    if (!next) { setTitle(bug.title); return; }
+    if (next !== bug.title) await patch({ title: next });
+  };
+
+  const saveDescription = async () => {
+    const ok = await patch({ description: descDraft.description, steps_to_reproduce: descDraft.steps }, 'Saved');
+    if (ok) setEditDesc(false);
+  };
+
+  const postComment = async (e) => {
+    e.preventDefault();
+    if (!comment.trim()) return;
+    setPosting(true);
+    try {
+      await api.post('comments/', { bug: id, content: comment, ...(replyTo ? { parent: replyTo.id } : {}) });
+      setComment('');
+      setReplyTo(null);
+      await load();
+    } catch (err) { toast.error(errorMessage(err)); }
+    setPosting(false);
+  };
+
+  const logWork = async (e) => {
+    e.preventDefault();
+    try {
+      await api.post('worklogs/', { bug: id, hours, note });
+      setHours(''); setNote('');
+      load();
+    } catch (err) { toast.error(errorMessage(err)); }
+  };
+
+  const removeWork = async (logId) => {
+    try { await api.delete(`worklogs/${logId}/`); load(); } catch (err) { toast.error(errorMessage(err)); }
+  };
+
+  const setLinks = async (ids) => { const ok = await patch({ linked_bug_ids: ids }); if (ok) { setLinkQuery(''); setLinkResults([]); } };
+
+  const upload = async (list) => {
+    setUploading(true);
+    for (const file of Array.from(list)) {
+      const body = new FormData();
+      body.append('bug', id);
+      body.append('file', file);
+      try { await api.post('attachments/', body); } catch (err) { toast.error(`${file.name}: ${errorMessage(err)}`); }
+    }
+    setUploading(false);
+    load();
+  };
+
+  const removeAttachment = async (attId) => {
+    try { await api.delete(`attachments/${attId}/`); load(); } catch (err) { toast.error(errorMessage(err)); }
+  };
+
+  const removeBug = async () => {
+    try {
+      await api.delete(`bugs/${id}/`);
+      toast.success('Bug deleted');
+      navigate('/bugs', { replace: true });
+    } catch (err) { toast.error(errorMessage(err)); setConfirmDelete(false); }
+  };
+
+  const totalHours = useMemo(() => (bug?.work_logs || []).reduce((sum, l) => sum + Number(l.hours), 0), [bug]);
+  const commentCount = useMemo(() => {
+    const count = (list) => list.reduce((n, c) => n + 1 + count(c.replies || []), 0);
+    return count(bug?.comments || []);
+  }, [bug]);
+
+  if (notFound) return <EmptyState icon={AlertTriangle} title="Bug not found" action={<Link to="/bugs" className="btn btn--primary">Back to all bugs</Link>}>It may have been deleted, or you may not have access to it.</EmptyState>;
+  if (!bug) return <PageLoader />;
+
+  const overdue = isOverdue(bug);
+  const linkedIds = bug.linked_bugs_detail.map((b) => b.id);
+
+  return (
+    <div>
+      <Link to="/bugs" className="back-link">← All bugs</Link>
+      {overdue && <div className="overdue-banner"><AlertTriangle size={18} />Overdue — the target date was {formatDate(bug.due_date)}.</div>}
+
+      <div style={{ marginBottom: 20 }}>
+        <div className="row" style={{ marginBottom: 4 }}>
+          <span className="issue__id" style={{ fontSize: 13 }}>{bug.display_id}</span>
+          <StatusBadge status={bug.status} /><PriorityBadge priority={bug.priority} />
+        </div>
+        {canEdit ? (
+          <input id="bug-title" className="title-edit" value={title} maxLength={255} aria-label="Title" onChange={(e) => setTitle(e.target.value)} onBlur={saveTitle} onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); if (e.key === 'Escape') { setTitle(bug.title); e.currentTarget.blur(); } }} />
+        ) : <h1>{bug.title}</h1>}
+      </div>
+
+      <div className="detail">
+        <div className="stack">
+          <Card title="Description" extra={canEdit && !editDesc && <button className="btn btn--ghost btn--sm" onClick={() => { setDescDraft({ description: bug.description, steps: bug.steps_to_reproduce || '' }); setEditDesc(true); }}><Pencil size={13} /> Edit</button>}>
+            {editDesc ? (
+              <div className="stack" style={{ gap: 14 }}>
+                <MarkdownEditor value={descDraft.description} onChange={(v) => setDescDraft((d) => ({ ...d, description: v }))} />
+                <div className="field"><label>Steps to reproduce</label><MarkdownEditor rows={4} value={descDraft.steps} onChange={(v) => setDescDraft((d) => ({ ...d, steps: v }))} /></div>
+                <div className="form-actions" style={{ padding: 0 }}>
+                  <button className="btn btn--secondary" onClick={() => setEditDesc(false)}>Cancel</button>
+                  <button className="btn btn--primary" disabled={!descDraft.description.trim()} onClick={saveDescription}>Save</button>
+                </div>
               </div>
             ) : (
-              <div style={{ textAlign: 'center', padding: '24px 0', color: 'var(--text-dim)', fontSize: '0.85rem' }}>
-                No comments yet. Start the conversation.
+              <>
+                <Markdown>{bug.description}</Markdown>
+                {bug.steps_to_reproduce && (<><hr className="divider" style={{ margin: '16px 0' }} /><div className="label" style={{ marginBottom: 8 }}>Steps to reproduce</div><Markdown>{bug.steps_to_reproduce}</Markdown></>)}
+              </>
+            )}
+          </Card>
+
+          <Card icon={Paperclip} title={`Attachments${bug.attachments.length ? ` (${bug.attachments.length})` : ''}`}
+            extra={<><button className="btn btn--secondary btn--sm" disabled={uploading} onClick={() => fileInput.current.click()}><Upload size={13} /> {uploading ? 'Uploading…' : 'Add files'}</button><input ref={fileInput} hidden multiple type="file" onChange={(e) => { upload(e.target.files); e.target.value = ''; }} /></>}>
+            {bug.attachments.length === 0 ? <p className="muted">No attachments.</p> : (
+              <div className="stack" style={{ gap: 10 }}>
+                {bug.attachments.map((a) => {
+                  const url = fileUrl(a.file);
+                  const name = a.filename;
+                  return (
+                    <div key={a.id}>
+                      <div className="attachment">
+                        {isImage(name) ? <img className="thumb" src={url} alt="" onClick={() => setLightbox(url)} /> : <FileText size={22} />}
+                        <div className="grow"><div className="truncate" style={{ fontWeight: 550 }}>{name}</div><div className="muted" style={{ fontSize: 12.5 }}>{fullName(a.uploaded_by)} · {timeAgo(a.uploaded_at)}</div></div>
+                        <a className="btn btn--ghost btn--icon btn--sm" href={url} download aria-label={`Download ${name}`}><Download size={15} /></a>
+                        {(isManager || a.uploaded_by?.id === user.id) && <button className="btn btn--ghost btn--icon btn--sm" aria-label={`Remove ${name}`} onClick={() => removeAttachment(a.id)}><Trash2 size={15} /></button>}
+                      </div>
+                      {isVideo(name) && <video controls src={url} style={{ width: '100%', marginTop: 8, borderRadius: 'var(--radius)', background: '#000' }} />}
+                    </div>
+                  );
+                })}
               </div>
             )}
+          </Card>
 
-            {/* Comment Input */}
-            <form onSubmit={handleAddComment} style={{ display: 'flex', flexDirection: 'column', gap: '8px', borderTop: '1px solid var(--border)', paddingTop: '16px' }}>
-              {replyTo && (
-                <div style={{ 
-                  display: 'flex', 
-                  justifyContent: 'space-between', 
-                  alignItems: 'center', 
-                  backgroundColor: 'var(--accent-muted)', 
-                  border: '1px solid var(--border-accent)',
-                  padding: '8px 12px', 
-                  borderRadius: 'var(--radius-md)', 
-                  fontSize: '0.82rem', 
-                  color: 'var(--text-primary)' 
-                }}>
-                  <span className="flex items-center gap-2">
-                    <Reply size={14} style={{ color: 'var(--accent-hover)' }} />
-                    Replying to <strong style={{ color: 'var(--accent-hover)' }}>@{replyingToAuthor}</strong>
-                  </span>
-                  <button 
-                    type="button" 
-                    onClick={() => setReplyTo(null)} 
-                    className="btn btn--ghost" 
-                    style={{ padding: '2px 4px', color: 'var(--text-muted)' }}
-                    title="Cancel reply"
-                  >
-                    <X size={14} />
-                  </button>
+          <Card icon={MessageSquare} title={`Discussion${commentCount ? ` (${commentCount})` : ''}`}>
+            <div className="stack" style={{ gap: 14 }}>
+              {bug.comments.length === 0 && <p className="muted">No comments yet. Start the conversation.</p>}
+              {bug.comments.map((c) => (
+                <CommentItem key={c.id} comment={c} me={user} canModerate={role === 'Admin' || Boolean(user.is_superuser)} depth={0} onReply={(target) => { setReplyTo(target); document.getElementById('comment-box')?.scrollIntoView({ block: 'center' }); }} onChanged={load} />
+              ))}
+              <form onSubmit={postComment} className="stack" style={{ gap: 8, borderTop: '1px solid var(--border)', paddingTop: 16 }} id="comment-box">
+                {replyTo && (
+                  <div className="alert alert--info" style={{ alignItems: 'center' }}>
+                    <Reply size={14} /><span className="grow">Replying to <b>{fullName(replyTo.author)}</b></span>
+                    <button type="button" className="btn btn--ghost btn--icon btn--sm" aria-label="Cancel reply" onClick={() => setReplyTo(null)}><X size={14} /></button>
+                  </div>
+                )}
+                <MarkdownEditor value={comment} onChange={setComment} rows={3} placeholder="Write a comment…" />
+                <button className="btn btn--primary" style={{ alignSelf: 'flex-end' }} disabled={posting || !comment.trim()}><Send size={14} /> {posting ? 'Posting…' : 'Comment'}</button>
+              </form>
+            </div>
+          </Card>
+
+          <Card icon={ActivityIcon} title="Activity">
+            <ul className="timeline">
+              {bug.activity_logs.map((log) => (
+                <li key={log.id}>
+                  <b>{fullName(log.actor) || 'System'}</b> {log.action.toLowerCase()}
+                  {(log.old_value || log.new_value) && log.action !== 'Created' && <span className="muted"> — {log.old_value || 'none'} → {log.new_value || 'none'}</span>}
+                  <span className="muted"> · {timeAgo(log.created_at)}</span>
+                </li>
+              ))}
+            </ul>
+          </Card>
+        </div>
+
+        <aside className="detail__side">
+          <section className="card"><div className="card__body">
+            <Prop label="Status">
+              <select className="select select--sm" disabled={!canEdit} value={bug.status} onChange={(e) => patch({ status: e.target.value })} aria-label="Status">{STATUSES.map((s) => <option key={s}>{s}</option>)}</select>
+            </Prop>
+            <Prop label="Priority">
+              <select className="select select--sm" disabled={!canEdit} value={bug.priority} onChange={(e) => patch({ priority: e.target.value })} aria-label="Priority">{PRIORITIES.map((p) => <option key={p}>{p}</option>)}</select>
+            </Prop>
+            <Prop label="Assignee">
+              <select className="select select--sm" disabled={!canEdit} value={bug.assigned_to?.id || ''} onChange={(e) => patch({ assigned_to_id: e.target.value || null })} aria-label="Assignee">
+                <option value="">Unassigned</option>
+                {people.map((u) => <option key={u.id} value={u.id}>{fullName(u)}</option>)}
+              </select>
+            </Prop>
+            <Prop label="Project">
+              <select className="select select--sm" disabled={!canEdit} value={bug.project || ''} onChange={(e) => patch({ project: e.target.value || null })} aria-label="Project">
+                <option value="">None</option>
+                {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+              </select>
+            </Prop>
+            <Prop label="Due date">
+              <div className="row">
+                <input type="date" className="input input--sm" disabled={!canEdit} value={bug.due_date || ''} onChange={(e) => patch({ due_date: e.target.value || null })} aria-label="Due date" style={overdue ? { color: 'var(--danger)', fontWeight: 600 } : undefined} />
+              </div>
+            </Prop>
+            <Prop label="Tags">
+              <div className="row row--wrap" style={{ gap: 6 }}>
+                {allTags.length === 0 && bug.tags_detail.length === 0 && <span className="muted">None</span>}
+                {allTags.map((t) => {
+                  const on = bug.tags_detail.some((x) => x.id === t.id);
+                  return (
+                    <button key={t.id} type="button" className="tag" aria-pressed={on} disabled={!canEdit} style={{ '--tag': t.color, cursor: canEdit ? 'pointer' : 'default', opacity: on ? 1 : 0.45 }}
+                      onClick={() => patch({ tag_ids: on ? bug.tags_detail.filter((x) => x.id !== t.id).map((x) => x.id) : [...bug.tags_detail.map((x) => x.id), t.id] })}>{t.name}</button>
+                  );
+                })}
+              </div>
+            </Prop>
+            <Prop label="Reporter"><span className="person"><Avatar user={bug.created_by} size="sm" />{fullName(bug.created_by)}</span></Prop>
+            <Prop label="Created"><span title={new Date(bug.created_at).toLocaleString()}>{formatDate(bug.created_at)}</span></Prop>
+            <Prop label="Updated"><span title={new Date(bug.updated_at).toLocaleString()}>{timeAgo(bug.updated_at)}</span></Prop>
+          </div></section>
+
+          <Card icon={Clock} title="Time tracking" extra={`${totalHours.toFixed(2).replace(/\.?0+$/, '')}h logged`}>
+            <div className="stack" style={{ gap: 8 }}>
+              {bug.work_logs.map((l) => (
+                <div key={l.id} className="row" style={{ alignItems: 'flex-start' }}>
+                  <div className="grow"><b>{Number(l.hours)}h</b> <span className="muted">by {fullName(l.user)} · {timeAgo(l.created_at)}</span>{l.note && <div style={{ color: 'var(--text-2)' }}>{l.note}</div>}</div>
+                  {(l.user?.id === user.id || user.profile?.role === 'Admin') && <button className="btn btn--ghost btn--icon btn--sm" aria-label="Delete time entry" onClick={() => removeWork(l.id)}><Trash2 size={13} /></button>}
+                </div>
+              ))}
+              <form onSubmit={logWork} className="row" style={{ marginTop: 4 }}>
+                <input className="input input--sm" type="number" step="0.25" min="0.25" max="999" required placeholder="Hours" aria-label="Hours" style={{ width: 80 }} value={hours} onChange={(e) => setHours(e.target.value)} />
+                <input className="input input--sm" placeholder="Note (optional)" aria-label="Note" value={note} onChange={(e) => setNote(e.target.value)} />
+                <button className="btn btn--secondary btn--sm">Log</button>
+              </form>
+            </div>
+          </Card>
+
+          <Card icon={Link2} title="Linked issues">
+            <div className="stack" style={{ gap: 8 }}>
+              {bug.linked_bugs_detail.map((b) => (
+                <div key={b.id} className="row">
+                  <Link to={`/bug/${b.id}`} className="grow truncate" style={{ color: 'var(--accent-text)' }}><span className="issue__id">{b.display_id}</span> {b.title}</Link>
+                  <StatusBadge status={b.status} />
+                  {canEdit && <button className="btn btn--ghost btn--icon btn--sm" aria-label={`Unlink ${b.display_id}`} onClick={() => setLinks(linkedIds.filter((x) => x !== b.id))}><X size={14} /></button>}
+                </div>
+              ))}
+              {canEdit && (
+                <div style={{ position: 'relative' }}>
+                  <input className="input input--sm" placeholder="Link another bug — search by title or ID" aria-label="Search bugs to link" value={linkQuery} onChange={(e) => setLinkQuery(e.target.value)} />
+                  {linkResults.length > 0 && (
+                    <div className="popover" style={{ left: 0, right: 0, width: 'auto', top: 'calc(100% + 4px)' }}>
+                      {linkResults.filter((b) => b.id !== bug.id && !linkedIds.includes(b.id)).map((b) => (
+                        <button key={b.id} type="button" className="notif" onClick={() => setLinks([...linkedIds, b.id])}><span className="truncate"><span className="issue__id">{b.display_id}</span> {b.title}</span></button>
+                      ))}
+                    </div>
+                  )}
                 </div>
               )}
-              <MarkdownEditor
-                value={comment}
-                onChange={setComment}
-                placeholder="Write a comment..."
-                minHeight="70px"
-              />
-              <button type="submit" className="btn btn--primary btn--sm" disabled={submitting || !comment.trim()} style={{ alignSelf: 'flex-end' }}>
-                <Send size={14} />
-                {submitting ? 'Posting...' : 'Post Comment'}
-              </button>
-            </form>
-          </div>
-        </div>
+            </div>
+          </Card>
+
+          {(isManager || bug.created_by?.id === user.id) && (
+            <button className="btn btn--danger" onClick={() => setConfirmDelete(true)}><Trash2 size={15} /> Delete bug</button>
+          )}
+        </aside>
       </div>
+
+      {lightbox && <div className="lightbox" role="dialog" aria-label="Image preview" onClick={() => setLightbox(null)}><img src={lightbox} alt="Attachment preview" onClick={(e) => e.stopPropagation()} /></div>}
+      {confirmDelete && <ConfirmDialog danger title="Delete this bug?" message={`${bug.display_id} and all of its comments, attachments and history will be permanently deleted.`} confirmLabel="Delete bug" onConfirm={removeBug} onCancel={() => setConfirmDelete(false)} />}
     </div>
   );
 };
 
 export default BugDetail;
-

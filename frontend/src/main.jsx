@@ -1,18 +1,20 @@
-import { StrictMode } from 'react'
-import { createRoot } from 'react-dom/client'
-import './index.css'
-import App from './App.jsx'
-import { msalInstance } from './msalConfig'
+import { StrictMode } from 'react';
+import { createRoot } from 'react-dom/client';
+import './index.css';
+import App from './App.jsx';
+import { msalInstance, msalConfigured } from './msalConfig';
 
 async function startApp() {
-  await msalInstance.initialize();
-
-  // Handle the redirect response when Microsoft sends the user back
-  const response = await msalInstance.handleRedirectPromise();
-  
-  if (response && response.accessToken) {
-    // Store the MS access token temporarily so AuthContext can pick it up
-    sessionStorage.setItem('ms_access_token', response.accessToken);
+  if (msalConfigured) {
+    try {
+      await msalInstance.initialize();
+      // Back from the Microsoft redirect: hand the token to AuthContext.
+      const response = await msalInstance.handleRedirectPromise();
+      if (response?.accessToken) sessionStorage.setItem('ms_access_token', response.accessToken);
+    } catch (err) {
+      // A broken Microsoft setup must never stop password sign-in from working.
+      console.error('Microsoft sign-in initialisation failed', err);
+    }
   }
 
   createRoot(document.getElementById('root')).render(

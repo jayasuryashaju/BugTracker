@@ -1,230 +1,124 @@
-import Loader from '../components/Loader';
-import { useState, useEffect } from 'react';
-import { useAuth } from '../context/AuthContext';
-import api from '../api';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Mail, Search, Trash2, UserPlus, Users } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { Users, UserPlus, Mail } from 'lucide-react';
+import api from '../api';
+import { useAuth } from '../context/AuthContext';
+import { errorMessage, formatDate, fullName, ROLES, unwrap } from '../lib/utils';
+import { Avatar, ConfirmDialog, EmptyState, PageHead, RoleBadge, RowsSkeleton } from '../components/ui';
 
 const Team = () => {
-  const { user } = useAuth();
-  const [members, setMembers] = useState([]);
+  const { user, refreshUser } = useAuth();
+  const [members, setMembers] = useState(null);
   const [invites, setInvites] = useState([]);
-  const [loading, setLoading] = useState(true);
-
-  // Invite state
+  const [search, setSearch] = useState('');
   const [email, setEmail] = useState('');
   const [role, setRole] = useState('Developer');
   const [inviting, setInviting] = useState(false);
-  const [message, setMessage] = useState('');
+  const [revoke, setRevoke] = useState(null);
 
-  const userRole = user?.profile?.role || 'Developer';
-  const isAdmin = userRole === 'Admin' || user?.is_superuser;
-  const isManagerOrAdmin = userRole === 'Admin' || userRole === 'Manager' || userRole === 'Tester' || user?.is_superuser;
+  const myRole = user?.profile?.role;
+  const isAdmin = myRole === 'Admin' || user?.is_superuser;
+  const canInvite = isAdmin || myRole === 'Manager';
 
-  const fetchData = async () => {
-    try {
-      const [membersRes, invitesRes] = await Promise.all([
-        api.get('users/'),
-        api.get('invites/')
-      ]);
-      setMembers(Array.isArray(membersRes.data) ? membersRes.data : membersRes.data.results || []);
-      setInvites(Array.isArray(invitesRes.data) ? invitesRes.data : invitesRes.data.results || []);
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setLoading(false);
-    }
-  };
+  const load = useCallback(async () => {
+    const [m, i] = await Promise.allSettled([api.get('users/', { params: { page_size: 500 } }), canInvite ? api.get('invites/', { params: { page_size: 200 } }) : Promise.resolve({ data: [] })]);
+    setMembers(m.status === 'fulfilled' ? unwrap(m.value) : []);
+    if (i.status === 'fulfilled') setInvites(unwrap(i.value));
+  }, [canInvite]);
 
-  useEffect(() => {
-    fetchData();
-  }, []);
+  useEffect(() => { load(); }, [load]);
 
-  const handleInvite = async (e) => {
+  const invite = async (e) => {
     e.preventDefault();
-    if (!email) return;
     setInviting(true);
-    setMessage('');
     try {
-      await api.post('invites/', { email, role });
+      await api.post('invites/', { email: email.trim(), role });
+      toast.success(`Invite created for ${email.trim()}. They join ${user.profile.organization?.name || 'your organization'} when they sign up with that address.`, { duration: 6000 });
       setEmail('');
-      toast.success(`Invite sent to ${email} as ${role}!`);
-      fetchData();
-    } catch (err) {
-      console.error(err);
-      const errorMsg = err.response?.data?.email?.[0] || err.response?.data?.detail || err.response?.data?.non_field_errors?.[0] || 'Failed to send invite.';
-      toast.error(errorMsg);
-    } finally {
-      setInviting(false);
-    }
+      load();
+    } catch (err) { toast.error(errorMessage(err, 'Could not create the invite.')); }
+    setInviting(false);
   };
 
-  const handleMemberRoleChange = async (memberId, newRole) => {
+  const changeRole = async (member, newRole) => {
     try {
-      const member = members.find(m => m.id === memberId);
-      if (!member) return;
-
-      await api.put(`users/${memberId}/`, {
-        ...member,
-        profile: {
-          ...member.profile,
-          role: newRole
-        }
-      });
-      toast.success('Role updated successfully!');
-      fetchData();
+      await api.patch(`users/${member.id}/`, { profile: { role: newRole } });
+      toast.success(`${fullName(member)} is now ${newRole === 'Admin' ? 'an' : 'a'} ${newRole}`);
+      if (member.id === user.id) refreshUser();
+      load();
     } catch (err) {
-      const msg = err.response?.data?.profile?.role || 'Failed to update member role.';
-      toast.error(Array.isArray(msg) ? msg[0] : msg);
+      toast.error(errorMessage(err, 'Could not change that role.'));
+      load();
     }
   };
 
-  if (loading) return <Loader fullScreen />;
+  const revokeInvite = async () => {
+    try { await api.delete(`invites/${revoke.id}/`); setInvites((l) => l.filter((x) => x.id !== revoke.id)); toast.success('Invite revoked'); }
+    catch (err) { toast.error(errorMessage(err)); }
+    setRevoke(null);
+  };
+
+  const shown = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return (members || []).filter((m) => !q || `${fullName(m)} ${m.email} ${m.profile?.position || ''}`.toLowerCase().includes(q));
+  }, [members, search]);
+  const pending = invites.filter((i) => !i.accepted);
 
   return (
     <div>
-      <div className="page-header">
-        <div>
-          <h1 className="page-header__title">Team & User Management</h1>
-          <p className="page-header__subtitle">
-            Manage organization members, assign roles, and send email invites
-          </p>
-        </div>
-      </div>
+      <PageHead title="Team" subtitle={`People in ${user?.profile?.organization?.name || 'your organization'}.`} />
 
-      <div className="flex-col gap-6" style={{ display: 'flex', flexDirection: 'column' }}>
-        {/* Invite Form for Admins & Managers */}
-        {isManagerOrAdmin && (
-          <div className="card">
-            <div className="card__header">
-              <span className="card__title flex items-center gap-2">
-                <UserPlus size={18} style={{ color: 'var(--accent)' }} /> Invite New Team Member
-              </span>
-            </div>
-            <div className="card__body">
-              {message && (
-                <div style={{ padding: '10px 14px', borderRadius: 'var(--radius-md)', background: 'var(--status-resolved-bg)', color: 'var(--status-resolved)', fontSize: '0.85rem', marginBottom: '16px' }}>
-                  ✓ {message}
-                </div>
-              )}
-              <form onSubmit={handleInvite} className="flex gap-4 items-center">
-                <div className="form-group" style={{ flex: 2 }}>
-                  <input
-                    type="email"
-                    className="form-input"
-                    required
-                    placeholder="Enter team member's email (e.g. colleague@company.com)"
-                    value={email}
-                    onChange={e => setEmail(e.target.value)}
-                  />
-                </div>
-                <div className="form-group" style={{ flex: 1 }}>
-                  <select className="form-select" value={role} onChange={e => setRole(e.target.value)}>
-                    <option value="Developer">Developer</option>
-                    <option value="Tester">Tester / QA</option>
-                    <option value="Manager">Manager</option>
-                    <option value="Admin">Admin</option>
-                  </select>
-                </div>
-                <button type="submit" className="btn btn--primary" disabled={inviting}>
-                  {inviting ? 'Inviting...' : 'Send Invite'}
-                </button>
-              </form>
-            </div>
-          </div>
+      <div className="stack">
+        {canInvite && (
+          <section className="card">
+            <div className="card__head"><UserPlus size={16} style={{ color: 'var(--text-3)' }} /><h2>Invite someone</h2></div>
+            <form className="card__body row row--wrap" style={{ alignItems: 'flex-end' }} onSubmit={invite}>
+              <div className="field grow" style={{ minWidth: 220 }}><label htmlFor="ie">Email</label><input id="ie" type="email" required className="input" placeholder="colleague@company.com" value={email} onChange={(e) => setEmail(e.target.value)} /></div>
+              <div className="field" style={{ width: 160 }}>
+                <label htmlFor="ir">Role</label>
+                <select id="ir" className="select" value={role} onChange={(e) => setRole(e.target.value)}>{ROLES.filter((r) => isAdmin || r !== 'Admin').map((r) => <option key={r}>{r}</option>)}</select>
+              </div>
+              <button className="btn btn--primary" disabled={inviting || !email.trim()}>{inviting ? 'Inviting…' : 'Send invite'}</button>
+            </form>
+            <p className="hint" style={{ padding: '0 18px 16px' }}>No email is sent. Tell them to sign up (or sign in with Microsoft) using this address and they will join automatically.</p>
+          </section>
         )}
 
-        {/* Team Members List */}
-        <div className="card">
-          <div className="card__header">
-            <span className="card__title flex items-center gap-2">
-              <Users size={18} /> Active Members ({members.length})
-            </span>
+        <section className="card card--flush">
+          <div className="card__head">
+            <Users size={16} style={{ color: 'var(--text-3)' }} /><h2>Members</h2><span className="muted">{members?.length ?? ''}</span>
+            <div className="input-icon spacer" style={{ width: 240 }}><Search size={15} /><input className="input input--sm" type="search" placeholder="Filter…" aria-label="Filter members" value={search} onChange={(e) => setSearch(e.target.value)} /></div>
           </div>
-          <div className="card__body" style={{ padding: 0 }}>
-            <div className="bug-table">
-              <div className="bug-table__header" style={{ gridTemplateColumns: 'minmax(200px, 2fr) minmax(200px, 2fr) minmax(150px, 1fr) minmax(150px, 1fr)' }}>
-                <span>Member</span>
-                <span>Email</span>
-                <span>Role</span>
-                <span>Position</span>
+          {members === null ? <RowsSkeleton rows={4} /> : shown.length === 0 ? <EmptyState icon={Users} title="No one matches that search" /> : shown.map((m) => (
+            <div key={m.id} className="list-row" style={{ flexWrap: 'wrap' }}>
+              <Avatar user={m} size="md" />
+              <div className="grow" style={{ minWidth: 160 }}>
+                <div style={{ fontWeight: 600 }}>{fullName(m)} {m.id === user.id && <span className="badge badge--accent badge--plain" style={{ marginLeft: 4 }}>You</span>}</div>
+                <div className="muted truncate">{m.email}{m.profile?.position ? ` · ${m.profile.position}` : ''}</div>
               </div>
-              {members.map(m => (
-                <div key={m.id} className="bug-table__row" style={{ gridTemplateColumns: 'minmax(200px, 2fr) minmax(200px, 2fr) minmax(150px, 1fr) minmax(150px, 1fr)', cursor: 'default' }}>
-                  <div className="flex items-center gap-3">
-                    <div className="topbar__avatar" style={{ width: 32, height: 32, fontSize: '0.8rem' }}>
-                      {m.first_name?.[0]?.toUpperCase() || m.username?.[0]?.toUpperCase()}
-                    </div>
-                    <div>
-                      <div className="bug-table__title">
-                        {m.first_name ? `${m.first_name} ${m.last_name || ''}` : m.username}
-                      </div>
-                    </div>
-                  </div>
-                  <div className="bug-table__cell">{m.email || m.username}</div>
-                  <div className="bug-table__cell">
-                    {isAdmin ? (
-                      <select
-                        className="form-select"
-                        style={{ padding: '2px 6px', fontSize: '0.78rem', height: '28px' }}
-                        value={m.profile?.role || 'Developer'}
-                        onChange={e => handleMemberRoleChange(m.id, e.target.value)}
-                      >
-                        <option value="Admin">Admin</option>
-                        <option value="Manager">Manager</option>
-                        <option value="Tester">Tester</option>
-                        <option value="Developer">Developer</option>
-                      </select>
-                    ) : (
-                      <span className={`badge ${m.profile?.role === 'Admin' ? 'badge--critical' : m.profile?.role === 'Manager' ? 'badge--inprogress' : 'badge--open'}`}>
-                        {m.profile?.role || 'Developer'}
-                      </span>
-                    )}
-                  </div>
-                  <div className="bug-table__cell text-muted" style={{ fontSize: '0.8rem' }}>
-                    {m.profile?.position || 'Team Member'}
-                  </div>
-                </div>
-              ))}
+              {isAdmin ? (
+                <select className="select select--sm" style={{ width: 130 }} aria-label={`Role for ${fullName(m)}`} value={m.profile?.role || 'Developer'} onChange={(e) => changeRole(m, e.target.value)}>
+                  {ROLES.map((r) => <option key={r}>{r}</option>)}
+                </select>
+              ) : <RoleBadge role={m.profile?.role} />}
             </div>
-          </div>
-        </div>
+          ))}
+        </section>
 
-        {/* Pending Invites */}
-        {invites.length > 0 && (
-          <div className="card">
-            <div className="card__header">
-              <span className="card__title flex items-center gap-2">
-                <Mail size={18} /> Pending Invites ({invites.filter(i => !i.accepted).length})
-              </span>
-            </div>
-            <div className="card__body" style={{ padding: 0 }}>
-              <div className="bug-table">
-                <div className="bug-table__header" style={{ gridTemplateColumns: 'minmax(250px, 2fr) minmax(150px, 1fr) minmax(150px, 1fr)' }}>
-                  <span>Email</span>
-                  <span>Role</span>
-                  <span>Status</span>
-                </div>
-                {invites.map(inv => (
-                  <div key={inv.id} className="bug-table__row" style={{ gridTemplateColumns: 'minmax(250px, 2fr) minmax(150px, 1fr) minmax(150px, 1fr)', cursor: 'default' }}>
-                    <div className="bug-table__cell" style={{ fontWeight: 500 }}>{inv.email}</div>
-                    <div className="bug-table__cell">
-                      <span className="badge badge--open">{inv.role}</span>
-                    </div>
-                    <div className="bug-table__cell">
-                      {inv.accepted ? (
-                        <span className="badge badge--resolved">Accepted</span>
-                      ) : (
-                        <span className="badge badge--inprogress">Pending</span>
-                      )}
-                    </div>
-                  </div>
-                ))}
+        {canInvite && pending.length > 0 && (
+          <section className="card card--flush">
+            <div className="card__head"><Mail size={16} style={{ color: 'var(--text-3)' }} /><h2>Pending invites</h2><span className="muted">{pending.length}</span></div>
+            {pending.map((i) => (
+              <div key={i.id} className="list-row">
+                <div className="grow"><div style={{ fontWeight: 550 }}>{i.email}</div><div className="muted">Invited {formatDate(i.created_at)} by {i.invited_by}</div></div>
+                <RoleBadge role={i.role} />
+                <button className="btn btn--ghost btn--icon btn--sm" aria-label={`Revoke invite for ${i.email}`} onClick={() => setRevoke(i)}><Trash2 size={15} /></button>
               </div>
-            </div>
-          </div>
+            ))}
+          </section>
         )}
       </div>
+      {revoke && <ConfirmDialog danger title="Revoke invite" message={`${revoke.email} will no longer be able to join with this invite.`} confirmLabel="Revoke" onConfirm={revokeInvite} onCancel={() => setRevoke(null)} />}
     </div>
   );
 };

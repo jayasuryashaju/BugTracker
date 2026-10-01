@@ -5,16 +5,31 @@
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#4f46e5" />
-    <meta name="description" content="BugTracker Pro is a modern, real-time issue tracker and defect management platform for high-velocity software engineering teams." />
-    <title>BugTracker Pro — Enterprise Issue & Defect Tracking</title>
+    <meta name="color-scheme" content="light dark" />
+    <meta name="description" content="BugTracker Pro is a real-time issue tracker for engineering teams: projects, boards, assignments and analytics in one place." />
+    <title>BugTracker Pro</title>
+    <script>
+      // Set the theme before first paint so there is no flash of the wrong palette.
+      (function () {
+        var theme;
+        try { theme = localStorage.getItem('theme'); } catch (e) {}
+        if (theme !== 'light' && theme !== 'dark') {
+          theme = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+        }
+        document.documentElement.setAttribute('data-theme', theme);
+      })();
+    </script>
+    <style>
+      html[data-theme="dark"] body { background: #0d0d0d; }
+      html[data-theme="light"] body { background: #f6f6f3; }
+      .boot { min-height: 100vh; display: grid; place-items: center; }
+      .boot i { width: 22px; height: 22px; border-radius: 50%; border: 2px solid #8884; border-top-color: #4f46e5; animation: b .7s linear infinite; }
+      @keyframes b { to { transform: rotate(360deg); } }
+    </style>
   </head>
   <body>
-    <div id="root">
-      <div class="initial-loader">
-        <div class="initial-spinner"></div>
-      </div>
-    </div>
+    <div id="root"><div class="boot"><i></i></div></div>
+    <noscript>BugTracker Pro needs JavaScript to run.</noscript>
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>
-

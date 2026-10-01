@@ -1,123 +1,46 @@
-import Loader from '../components/Loader';
-import { useState, useEffect } from 'react';
+import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import api from '../api';
-import { Bell, CheckCheck, MessageSquare, AlertCircle, RefreshCw } from 'lucide-react';
+import { Bell, CheckCheck } from 'lucide-react';
+import { useNotifications } from '../context/NotificationsContext';
+import { fullName, timeAgo } from '../lib/utils';
+import { EmptyState, PageHead, RowsSkeleton } from '../components/ui';
+import { notifIcon } from '../lib/ui';
 
 const Notifications = () => {
-  const [notifications, setNotifications] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const { items, unread, loaded, markRead, markAllRead } = useNotifications();
+  const [tab, setTab] = useState('all');
   const navigate = useNavigate();
+  const shown = useMemo(() => (tab === 'unread' ? items.filter((n) => !n.is_read) : items), [items, tab]);
 
-  const fetchNotifications = () => {
-    api.get('notifications/').then(res => {
-      setNotifications(Array.isArray(res.data) ? res.data : res.data.results || []);
-      setLoading(false);
-    }).catch(err => {
-      console.error(err);
-      setLoading(false);
-    });
+  const open = (n) => {
+    if (!n.is_read) markRead(n.id);
+    if (n.bug) navigate(`/bug/${n.bug}`);
   };
-
-  useEffect(() => {
-    fetchNotifications();
-  }, []);
-
-  const markAsRead = async (id, bugId) => {
-    try {
-      await api.post(`notifications/${id}/mark_read/`);
-      setNotifications(prev => prev.map(n => n.id === id ? { ...n, is_read: true } : n));
-      if (bugId) navigate(`/bug/${bugId}`);
-    } catch (err) {
-      console.error(err);
-    }
-  };
-
-  const markAllRead = async () => {
-    try {
-      await api.post('notifications/read_all/');
-      setNotifications(prev => prev.map(n => ({ ...n, is_read: true })));
-    } catch (err) {
-      console.error(err);
-    }
-  };
-
-  const getIcon = (type) => {
-    switch (type) {
-      case 'Assigned': return <AlertCircle size={18} style={{ color: 'var(--status-open)' }} />;
-      case 'StatusChanged': return <RefreshCw size={18} style={{ color: 'var(--status-progress)' }} />;
-      case 'Commented': return <MessageSquare size={18} style={{ color: 'var(--accent)' }} />;
-      default: return <Bell size={18} />;
-    }
-  };
-
-  if (loading) return <Loader fullScreen />;
-
-  const unreadCount = notifications.filter(n => !n.is_read).length;
 
   return (
-    <div>
-      <div className="page-header">
-        <div>
-          <h1 className="page-header__title">Notifications</h1>
-          <p className="page-header__subtitle">Stay updated on bug assignments, status changes, and comments</p>
-        </div>
-        {unreadCount > 0 && (
-          <button onClick={markAllRead} className="btn btn--secondary">
-            <CheckCheck size={16} /> Mark all as read
-          </button>
-        )}
+    <div className="page--narrow" style={{ margin: '0 auto' }}>
+      <PageHead title="Notifications" subtitle="Assignments, status changes and comments on your bugs."
+        actions={<button className="btn btn--secondary" onClick={markAllRead} disabled={unread === 0}><CheckCheck size={15} /> Mark all read</button>} />
+      <div className="segmented" style={{ marginBottom: 16 }}>
+        <button aria-pressed={tab === 'all'} onClick={() => setTab('all')}>All</button>
+        <button aria-pressed={tab === 'unread'} onClick={() => setTab('unread')}>Unread{unread ? ` (${unread})` : ''}</button>
       </div>
-
-      <div className="card">
-        <div className="card__body" style={{ padding: 0 }}>
-          {notifications.length > 0 ? (
-            <div className="flex-col">
-              {notifications.map(n => (
-                <div
-                  key={n.id}
-                  onClick={() => markAsRead(n.id, n.bug)}
-                  style={{
-                    padding: '16px 20px',
-                    borderBottom: '1px solid var(--border)',
-                    display: 'flex',
-                    alignItems: 'flex-start',
-                    gap: '14px',
-                    cursor: 'pointer',
-                    backgroundColor: n.is_read ? 'transparent' : 'rgba(99, 102, 241, 0.05)',
-                    transition: 'background var(--transition-fast)'
-                  }}
-                  className="notification-item"
-                >
-                  <div style={{ marginTop: '2px' }}>{getIcon(n.notification_type)}</div>
-                  <div style={{ flex: 1 }}>
-                    <div className="flex justify-between items-center mb-1">
-                      <span style={{ fontWeight: n.is_read ? 500 : 700, fontSize: '0.9rem' }}>{n.title}</span>
-                      <span style={{ fontSize: '0.75rem', color: 'var(--text-dim)' }}>
-                        {new Date(n.created_at).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
-                      </span>
-                    </div>
-                    <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', margin: 0 }}>{n.message}</p>
-                    {n.actor && (
-                      <span style={{ fontSize: '0.75rem', color: 'var(--text-dim)', marginTop: '4px', display: 'inline-block' }}>
-                        By {n.actor.first_name || n.actor.username}
-                      </span>
-                    )}
-                  </div>
-                  {!n.is_read && (
-                    <span className="badge__dot" style={{ backgroundColor: 'var(--accent)', marginTop: '6px' }}></span>
-                  )}
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div className="empty-state">
-              <div className="empty-state__icon"><Bell size={28} /></div>
-              <div className="empty-state__title">No notifications yet</div>
-              <div className="empty-state__desc">You'll get notified when bugs are assigned or updated</div>
-            </div>
-          )}
-        </div>
+      <div className="card card--flush">
+        {!loaded ? <RowsSkeleton /> : shown.length === 0 ? (
+          <EmptyState icon={Bell} title={tab === 'unread' ? 'No unread notifications' : 'Nothing yet'}>You&apos;ll be notified when bugs are assigned to you, change status, or get a comment.</EmptyState>
+        ) : shown.map((n) => {
+          const Icon = notifIcon(n.notification_type);
+          return (
+            <button key={n.id} className={`notif ${n.is_read ? '' : 'notif--unread'}`} onClick={() => open(n)}>
+              <span className="notif__icon"><Icon size={15} /></span>
+              <span style={{ minWidth: 0, flex: 1 }}>
+                <span className="notif__title" style={{ display: 'block' }}>{n.title}</span>
+                <span className="notif__msg" style={{ WebkitLineClamp: 3 }}>{n.message}</span>
+                <span className="notif__time" style={{ display: 'block' }}>{n.actor ? `${fullName(n.actor)} · ` : ''}{timeAgo(n.created_at)}</span>
+              </span>
+            </button>
+          );
+        })}
       </div>
     </div>
   );

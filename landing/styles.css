@@ -298,7 +298,7 @@ footer {
   background: var(--bg-surface);
 }
 .footer-grid {
-  display: grid; grid-template-columns: 2fr 1fr 1fr 1fr; gap: 64px;
+  display: grid; grid-template-columns: 2fr 1fr; gap: 64px;
   max-width: 1200px; margin: 0 auto;
 }
 .footer-col h5 { font-size: 1.1rem; margin-bottom: 24px; font-weight: 600; }

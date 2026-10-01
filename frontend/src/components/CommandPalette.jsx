@@ -1,111 +1,113 @@
-import React, { useState, useEffect, useRef } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Search, Bug, FolderGit2, User, X } from 'lucide-react';
+import { Search, Bug, FolderGit2, User, LayoutDashboard, KanbanSquare, ListFilter, Bell, PlusCircle, Users } from 'lucide-react';
 import api from '../api';
+import useDebounced from '../hooks/useDebounced';
+import { unwrap, fullName } from '../lib/utils';
+
+const PAGES = [
+  { name: 'Dashboard', path: '/', icon: LayoutDashboard },
+  { name: 'All bugs', path: '/bugs', icon: ListFilter },
+  { name: 'Board', path: '/board', icon: KanbanSquare },
+  { name: 'Projects', path: '/projects', icon: FolderGit2 },
+  { name: 'Log a bug', path: '/create', icon: PlusCircle },
+  { name: 'Team', path: '/team', icon: Users },
+  { name: 'Notifications', path: '/notifications', icon: Bell },
+];
 
 export default function CommandPalette() {
-  const [isOpen, setIsOpen] = useState(false);
+  const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
-  const [bugs, setBugs] = useState([]);
-  const [projects, setProjects] = useState([]);
-  const [users, setUsers] = useState([]);
-  const [selectedIndex, setSelectedIndex] = useState(0);
+  const [remote, setRemote] = useState({ bugs: [], projects: [], users: [] });
+  const [selected, setSelected] = useState(0);
   const navigate = useNavigate();
   const inputRef = useRef(null);
+  const q = useDebounced(query.trim(), 200);
 
   useEffect(() => {
-    const handleKeyDown = (e) => {
-      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+    const onKey = (e) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
         e.preventDefault();
-        setIsOpen((prev) => !prev);
-      }
-      if (e.key === 'Escape') {
-        setIsOpen(false);
+        setOpen((v) => !v);
+      } else if (e.key === 'Escape') {
+        setOpen(false);
       }
     };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
+    const onOpen = () => setOpen(true);
+    window.addEventListener('keydown', onKey);
+    window.addEventListener('palette:open', onOpen);
+    return () => { window.removeEventListener('keydown', onKey); window.removeEventListener('palette:open', onOpen); };
   }, []);
 
   useEffect(() => {
-    if (isOpen) {
-      setQuery('');
-      setSelectedIndex(0);
-      api.get('bugs/').then(res => setBugs(res.data.results || res.data)).catch(err => console.error(err));
-      api.get('projects/').then(res => setProjects(res.data.results || res.data)).catch(err => console.error(err));
-      api.get('users/').then(res => setUsers(res.data.results || res.data)).catch(err => console.error(err));
-      setTimeout(() => inputRef.current?.focus(), 100);
-    }
-  }, [isOpen]);
-
-  const filteredBugs = bugs.filter(b => b.title.toLowerCase().includes(query.toLowerCase()) || (b.display_id && b.display_id.toLowerCase().includes(query.toLowerCase())));
-  const filteredProjects = projects.filter(p => p.name.toLowerCase().includes(query.toLowerCase()));
-  const filteredUsers = users.filter(u => u.username.toLowerCase().includes(query.toLowerCase()));
-
-  const allResults = [
-    ...filteredProjects.map(p => ({ id: p.id, type: 'Project', name: p.name, icon: <FolderGit2 size={16}/>, path: `/projects/${p.id}` })),
-    ...filteredBugs.map(b => ({ id: b.id, type: 'Bug', name: `${b.display_id} ${b.title}`, icon: <Bug size={16}/>, path: `/bug/${b.id}` })),
-    ...filteredUsers.map(u => ({ id: u.id, type: 'User', name: u.username, icon: <User size={16}/>, path: `/team` }))
-  ].slice(0, 8); // Limit to top 8
+    if (open) { setQuery(''); setRemote({ bugs: [], projects: [], users: [] }); setTimeout(() => inputRef.current?.focus(), 30); }
+  }, [open]);
 
   useEffect(() => {
-    setSelectedIndex(0);
-  }, [query]);
+    if (!open || !q) { setRemote({ bugs: [], projects: [], users: [] }); return undefined; }
+    let cancelled = false;
+    const params = { search: q, page_size: 5 };
+    Promise.allSettled([api.get('bugs/', { params }), api.get('projects/', { params }), api.get('users/', { params })]).then(([b, p, u]) => {
+      if (cancelled) return;
+      setRemote({
+        bugs: b.status === 'fulfilled' ? unwrap(b.value) : [],
+        projects: p.status === 'fulfilled' ? unwrap(p.value) : [],
+        users: u.status === 'fulfilled' ? unwrap(u.value) : [],
+      });
+    });
+    return () => { cancelled = true; };
+  }, [q, open]);
 
-  const handleKeyDown = (e) => {
-    if (e.key === 'ArrowDown') {
-      e.preventDefault();
-      if (allResults.length > 0) {
-        setSelectedIndex((prev) => (prev + 1) % allResults.length);
-      }
-    } else if (e.key === 'ArrowUp') {
-      e.preventDefault();
-      if (allResults.length > 0) {
-        setSelectedIndex((prev) => (prev - 1 + allResults.length) % allResults.length);
-      }
-    } else if (e.key === 'Enter' && allResults.length > 0) {
-      e.preventDefault();
-      navigate(allResults[selectedIndex].path);
-      setIsOpen(false);
-    }
+  const groups = useMemo(() => {
+    const lower = query.trim().toLowerCase();
+    const pages = PAGES.filter((p) => !lower || p.name.toLowerCase().includes(lower))
+      .map((p) => ({ key: p.path, label: p.name, icon: <p.icon size={16} />, path: p.path }));
+    return [
+      { title: 'Bugs', items: remote.bugs.map((b) => ({ key: b.id, label: b.title, hint: b.display_id, icon: <Bug size={16} />, path: `/bug/${b.id}` })) },
+      { title: 'Projects', items: remote.projects.map((p) => ({ key: p.id, label: p.name, hint: p.prefix, icon: <FolderGit2 size={16} />, path: `/project/${p.id}` })) },
+      { title: 'People', items: remote.users.map((u) => ({ key: u.id, label: fullName(u), hint: u.profile?.role, icon: <User size={16} />, path: '/team' })) },
+      { title: 'Go to', items: pages },
+    ].filter((g) => g.items.length);
+  }, [remote, query]);
+
+  const flat = groups.flatMap((g) => g.items);
+  useEffect(() => { setSelected(0); }, [q, flat.length]);
+
+  const go = (item) => { setOpen(false); navigate(item.path); };
+  const onKeyDown = (e) => {
+    if (e.key === 'ArrowDown') { e.preventDefault(); setSelected((s) => (flat.length ? (s + 1) % flat.length : 0)); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); setSelected((s) => (flat.length ? (s - 1 + flat.length) % flat.length : 0)); }
+    else if (e.key === 'Enter' && flat[selected]) { e.preventDefault(); go(flat[selected]); }
   };
 
-  if (!isOpen) return null;
-
+  if (!open) return null;
+  let index = -1;
   return (
-    <div className="command-palette-overlay" onClick={() => setIsOpen(false)}>
-      <div className="command-palette" onClick={e => e.stopPropagation()}>
-        <div className="command-palette__header">
-          <Search size={20} className="command-palette__icon" />
-          <input
-            ref={inputRef}
-            className="command-palette__input"
-            placeholder="Search projects, bugs, or teammates... (Cmd+K)"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            onKeyDown={handleKeyDown}
-          />
-          <button className="btn-icon" onClick={() => setIsOpen(false)}><X size={20} /></button>
+    <div className="modal-scrim" style={{ alignItems: 'start' }} onMouseDown={(e) => { if (e.target === e.currentTarget) setOpen(false); }}>
+      <div className="palette" role="dialog" aria-modal="true" aria-label="Search">
+        <div className="palette__input">
+          <Search size={18} />
+          <input ref={inputRef} value={query} onChange={(e) => setQuery(e.target.value)} onKeyDown={onKeyDown} placeholder="Search bugs, projects, people…" aria-label="Search" />
+          <span className="kbd">esc</span>
         </div>
-        <div className="command-palette__body">
-          {allResults.length > 0 ? (
-            allResults.map((item, idx) => (
-              <div 
-                key={`${item.type}-${item.id}`} 
-                className={`command-palette__item ${idx === selectedIndex ? 'selected' : ''}`}
-                onClick={() => { navigate(item.path); setIsOpen(false); }}
-                onMouseEnter={() => setSelectedIndex(idx)}
-              >
-                <div className="command-palette__item-icon">{item.icon}</div>
-                <div className="command-palette__item-content">
-                  <span className="command-palette__item-title">{item.name}</span>
-                  <span className="command-palette__item-type">{item.type}</span>
-                </div>
-              </div>
-            ))
-          ) : (
-            <div className="command-palette__empty">No results found.</div>
-          )}
+        <div className="palette__list" role="listbox">
+          {flat.length === 0 && <div className="palette__empty">No results for “{query}”</div>}
+          {groups.map((g) => (
+            <div key={g.title}>
+              <div className="palette__group">{g.title}</div>
+              {g.items.map((item) => {
+                index += 1;
+                const i = index;
+                return (
+                  <button key={`${g.title}-${item.key}`} role="option" aria-selected={i === selected} className="palette__item" onMouseEnter={() => setSelected(i)} onClick={() => go(item)}>
+                    {item.icon}
+                    <span className="truncate grow">{item.label}</span>
+                    {item.hint && <span className="muted mono" style={{ fontSize: 12 }}>{item.hint}</span>}
+                  </button>
+                );
+              })}
+            </div>
+          ))}
         </div>
       </div>
     </div>
