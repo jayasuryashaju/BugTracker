@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import {
   AlertTriangle, Clock, Link2, MessageSquare, Pencil, Reply, Send, Trash2, X, Activity as ActivityIcon, Paperclip,
@@ -105,6 +105,7 @@ const BugDetail = () => {
   const [linkResults, setLinkResults] = useState([]);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [uploads, setUploads] = useState([]);
+  const titleRef = useRef(null);
 
   const role = user?.profile?.role;
   const isManager = role === 'Admin' || role === 'Manager' || user?.is_superuser;
@@ -156,6 +157,12 @@ const BugDetail = () => {
       return false;
     }
   };
+
+  // The title is a textarea that grows with its content so long titles wrap instead of clipping.
+  useLayoutEffect(() => {
+    const el = titleRef.current;
+    if (el) { el.style.height = 'auto'; el.style.height = `${el.scrollHeight}px`; }
+  }, [title, bug?.id]);
 
   const saveTitle = async () => {
     const next = title.trim();
@@ -250,12 +257,12 @@ const BugDetail = () => {
           <StatusBadge status={bug.status} /><PriorityBadge priority={bug.priority} />
         </div>
         {canEdit ? (
-          <input id="bug-title" className="title-edit" value={title} maxLength={255} aria-label="Title" onChange={(e) => setTitle(e.target.value)} onBlur={saveTitle} onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); if (e.key === 'Escape') { setTitle(bug.title); e.currentTarget.blur(); } }} />
+          <textarea id="bug-title" ref={titleRef} rows={1} className="title-edit" value={title} maxLength={255} aria-label="Title" onChange={(e) => setTitle(e.target.value)} onBlur={saveTitle} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); e.currentTarget.blur(); } if (e.key === 'Escape') { setTitle(bug.title); e.currentTarget.blur(); } }} />
         ) : <h1>{bug.title}</h1>}
       </div>
 
       <div className="detail">
-        <div className="stack">
+        <div className="stack detail__main">
           <Card title="Description" extra={canEdit && !editDesc && <button className="btn btn--ghost btn--sm" onClick={() => { setDescDraft({ description: bug.description, steps: bug.steps_to_reproduce || '' }); setEditDesc(true); }}><Pencil size={13} /> Edit</button>}>
             {editDesc ? (
               <div className="stack" style={{ gap: 14 }}>
@@ -317,7 +324,7 @@ const BugDetail = () => {
         </div>
 
         <aside className="detail__side">
-          <section className="card"><div className="card__body">
+          <section className="card detail__props"><div className="card__body">
             <Prop label="Status">
               <select className="select select--sm" disabled={!canEdit} value={bug.status} onChange={(e) => patch({ status: e.target.value })} aria-label="Status">{STATUSES.map((s) => <option key={s}>{s}</option>)}</select>
             </Prop>
@@ -358,6 +365,7 @@ const BugDetail = () => {
             <Prop label="Updated"><span title={new Date(bug.updated_at).toLocaleString()}>{timeAgo(bug.updated_at)}</span></Prop>
           </div></section>
 
+          <div className="detail__rest stack">
           <Card icon={Clock} title="Time tracking" extra={`${totalHours.toFixed(2).replace(/\.?0+$/, '')}h logged`}>
             <div className="stack" style={{ gap: 8 }}>
               {bug.work_logs.map((l) => (
@@ -397,6 +405,7 @@ const BugDetail = () => {
               )}
             </div>
           </Card>
+          </div>
 
           {(isManager || bug.created_by?.id === user.id) && (
             <button className="btn btn--danger" onClick={() => setConfirmDelete(true)}><Trash2 size={15} /> Delete bug</button>

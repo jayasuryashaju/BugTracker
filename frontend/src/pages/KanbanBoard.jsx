@@ -120,7 +120,7 @@ const KanbanBoard = () => {
 
   return (
     <div>
-      <PageHead title="Board" subtitle="Drag a card to change its status. Click it to open the bug."
+      <PageHead title="Board" subtitle="Drag a card to change its status (press and hold on touch screens). Tap it to open the bug."
         actions={(
           <>
             <select className="select" style={{ width: 180 }} aria-label="Project" value={project} onChange={(e) => setProject(e.target.value)}>

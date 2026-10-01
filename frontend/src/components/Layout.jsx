@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard, PlusCircle, LogOut, Bell, Users, ListFilter, Check,
-  FolderGit2, Building, Sun, Moon, KanbanSquare, Menu, Search, User as UserIcon,
+  FolderGit2, Building, Sun, Moon, KanbanSquare, Menu, Search, User as UserIcon, Plus,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useNotifications } from '../context/NotificationsContext';
@@ -151,6 +151,15 @@ const Layout = ({ children }) => {
         </header>
         <main className="page animate-in" key={pathname.split('/').slice(0, 2).join('/')}>{children}</main>
       </div>
+      <nav className="tabbar" aria-label="Quick navigation">
+        <NavLink to="/" end className="tab"><LayoutDashboard size={20} />Home</NavLink>
+        <NavLink to="/bugs" className="tab"><ListFilter size={20} />Bugs</NavLink>
+        <NavLink to="/create" className="tab tab--primary" aria-label="Log a bug"><span className="tab__fab"><Plus size={24} /></span></NavLink>
+        <NavLink to="/board" className="tab"><KanbanSquare size={20} />Board</NavLink>
+        <button type="button" className="tab" onClick={() => setMenuOpen(true)}>
+          <Menu size={20} />More{unread > 0 && <span className="nav-count">{unread > 9 ? '9+' : unread}</span>}
+        </button>
+      </nav>
       <CommandPalette />
     </div>
   );
