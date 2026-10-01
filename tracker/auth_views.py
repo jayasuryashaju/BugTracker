@@ -1,25 +1,46 @@
+import re
+
 import requests
-from rest_framework.decorators import api_view, permission_classes
-from rest_framework.permissions import AllowAny, IsAuthenticated
-from rest_framework.response import Response
-from rest_framework import status
 from django.contrib.auth.models import User
-from .models import UserProfile, Organization, OrganizationInvite
-from rest_framework_simplejwt.tokens import RefreshToken
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError
+from django.core.validators import validate_email
+from rest_framework import status
+from rest_framework.decorators import api_view, permission_classes, throttle_classes
+from rest_framework.permissions import AllowAny, IsAuthenticated
+from rest_framework.response import Response
+from rest_framework.throttling import AnonRateThrottle
+from rest_framework_simplejwt.tokens import RefreshToken
 
-def process_user_organization(user, email, requested_role=None, default_job_title=''):
+from .models import Organization, OrganizationInvite, UserProfile
+from .permissions import FREE_MAIL_DOMAINS
+
+USERNAME_RE = re.compile(r'^[\w.@+-]{3,150}$')
+
+
+class AuthRateThrottle(AnonRateThrottle):
+    scope = 'auth'
+
+
+def display_name_for(user):
+    return (f"{user.first_name} {user.last_name}".strip()) or user.username
+
+
+def process_user_organization(user, email, default_job_title=''):
+    """Attach a freshly authenticated user to an organization.
+
+    Returns (is_new_org, error_message).
+    """
     profile, _ = UserProfile.objects.get_or_create(
         user=user,
         defaults={'position': default_job_title or '', 'working_on': ''}
     )
 
-    # 1. FIRST check if an explicit OrganizationInvite exists for this email!
-    invite = OrganizationInvite.objects.filter(email__iexact=email, accepted=False).first()
+    # 1. An explicit invitation always wins.
+    invite = OrganizationInvite.objects.filter(email__iexact=email, accepted=False).order_by('-created_at').first()
     if invite:
         invite.accepted = True
-        invite.save()
+        invite.save(update_fields=['accepted'])
         profile.organization = invite.organization
         profile.role = invite.role
         profile.status = 'Active'
@@ -27,162 +48,179 @@ def process_user_organization(user, email, requested_role=None, default_job_titl
         profile.save()
         return False, None
 
-    # 2. Check if user already has an active organization
+    # 2. Already in an organization.
     if profile.organization and profile.status == 'Active':
         return False, None
 
-    # 3. Check organization by email domain
     domain = email.split('@')[-1].lower() if '@' in email else 'default.com'
-    org = Organization.objects.filter(domain__iexact=domain).first()
 
+    # 3. Public mail providers (gmail.com, outlook.com...) never share a workspace:
+    #    each person gets a private one and can invite others into it.
+    if domain in FREE_MAIL_DOMAINS:
+        org = Organization.objects.create(
+            name=f"{display_name_for(user)}'s Workspace",
+            domain=email,
+        )
+        profile.organization = org
+        profile.role = 'Admin'
+        profile.status = 'Active'
+        profile.position = profile.position or default_job_title or 'Workspace Owner'
+        profile.save()
+        return True, None
+
+    # 4. Company domains: the first person creates the organization and becomes Admin.
+    org = Organization.objects.filter(domain__iexact=domain).first()
     if not org:
-        # First user for this domain -> Create Organization and make user Admin
-        org_name = domain.split('.')[0].replace('-', ' ').title()
-        org = Organization.objects.create(name=org_name, domain=domain)
+        org = Organization.objects.create(name=domain.split('.')[0].replace('-', ' ').title(), domain=domain)
         profile.organization = org
         profile.role = 'Admin'
         profile.status = 'Active'
         profile.position = profile.position or default_job_title or 'Organization Admin'
         profile.save()
         return True, None
-    else:
-        # Organization ALREADY exists for this domain and user was NOT invited
-        if user.is_superuser:
-            profile.organization = org
-            profile.role = 'Admin'
-            profile.status = 'Active'
-            profile.save()
-            return False, None
-            
-        error_msg = f"The organization tenant '{domain}' is already registered in BugTracker Pro. You cannot set up a new account for this domain. Please ask your Organization Admin to send you an invite."
-        return False, error_msg
 
-@api_view(['POST'])
-@permission_classes([AllowAny])
-def login_view(request):
-    username_or_email = request.data.get('username') or request.data.get('email')
-    password = request.data.get('password')
-    
-    if not username_or_email or not password:
-        return Response({'error': 'Please provide email/username and password'}, status=status.HTTP_400_BAD_REQUEST)
-        
-    identifier = username_or_email.lower().strip()
-    
-    user = User.objects.filter(email__iexact=identifier).first() or User.objects.filter(username__iexact=identifier).first()
-        
-    if not user or not user.check_password(password):
-        return Response({'error': 'Invalid email/username or password.'}, status=status.HTTP_401_UNAUTHORIZED)
-        
-    refresh = RefreshToken.for_user(user)
-    return Response({
-        'refresh': str(refresh),
-        'access': str(refresh.access_token),
-    })
+    if user.is_superuser:
+        profile.organization = org
+        profile.role = 'Admin'
+        profile.status = 'Active'
+        profile.save()
+        return False, None
 
-@api_view(['POST'])
-@permission_classes([AllowAny])
-def register(request):
-    username = request.data.get('username')
-    email = request.data.get('email')
-    password = request.data.get('password')
-    first_name = request.data.get('first_name', '')
-    last_name = request.data.get('last_name', '')
-    role = request.data.get('role', 'Admin')
-    
-    if not username or not email or not password:
-        return Response({'error': 'Please provide username, email, and password'}, status=status.HTTP_400_BAD_REQUEST)
-        
-    try:
-        validate_password(password)
-    except ValidationError as e:
-        return Response({'error': list(e.messages)}, status=status.HTTP_400_BAD_REQUEST)
-        
-    if User.objects.filter(username__iexact=username).exists() or User.objects.filter(email__iexact=email).exists():
-        return Response({'error': 'A user with this username or email already exists'}, status=status.HTTP_400_BAD_REQUEST)
-        
-    user = User.objects.create_user(
-        username=username.lower(),
-        email=email.lower(),
-        password=password,
-        first_name=first_name,
-        last_name=last_name
+    return False, (
+        f"The organization '{domain}' is already registered in BugTracker Pro. "
+        "Ask your organization Admin to send you an invite."
     )
-    
-    is_new_org, error_msg = process_user_organization(user, email.lower(), requested_role=role)
+
+
+def _tokens_for(user, **extra):
+    refresh = RefreshToken.for_user(user)
+    return {'refresh': str(refresh), 'access': str(refresh.access_token), **extra}
+
+
+@api_view(['POST'])
+@permission_classes([AllowAny])
+@throttle_classes([AuthRateThrottle])
+def login_view(request):
+    identifier = request.data.get('username') or request.data.get('email')
+    password = request.data.get('password')
+
+    if not identifier or not password:
+        return Response({'error': 'Please provide email/username and password'}, status=status.HTTP_400_BAD_REQUEST)
+
+    identifier = str(identifier).lower().strip()
+    user = (
+        User.objects.filter(email__iexact=identifier).first()
+        or User.objects.filter(username__iexact=identifier).first()
+    )
+
+    if not user or not user.is_active or not user.check_password(password):
+        return Response({'error': 'Invalid email/username or password.'}, status=status.HTTP_401_UNAUTHORIZED)
+
+    return Response(_tokens_for(user))
+
+
+@api_view(['POST'])
+@permission_classes([AllowAny])
+@throttle_classes([AuthRateThrottle])
+def register(request):
+    email = str(request.data.get('email') or '').strip().lower()
+    username = str(request.data.get('username') or '').strip().lower() or email.split('@')[0]
+    password = request.data.get('password')
+    first_name = str(request.data.get('first_name') or '').strip()[:150]
+    last_name = str(request.data.get('last_name') or '').strip()[:150]
+
+    if not email or not username or not password:
+        return Response({'error': 'Please provide an email and a password.'}, status=status.HTTP_400_BAD_REQUEST)
+
+    try:
+        validate_email(email)
+    except ValidationError:
+        return Response({'error': 'Please enter a valid email address.'}, status=status.HTTP_400_BAD_REQUEST)
+
+    if not USERNAME_RE.match(username):
+        username = re.sub(r'[^\w.@+-]', '', username)[:150]
+        if len(username) < 3:
+            username = email
+
+    try:
+        validate_password(password, user=User(username=username, email=email, first_name=first_name, last_name=last_name))
+    except ValidationError as e:
+        return Response({'error': ' '.join(e.messages)}, status=status.HTTP_400_BAD_REQUEST)
+
+    if User.objects.filter(email__iexact=email).exists():
+        return Response({'error': 'An account with this email already exists. Try signing in instead.'}, status=status.HTTP_400_BAD_REQUEST)
+    if User.objects.filter(username__iexact=username).exists():
+        username = email  # emails are unique, so this can never collide with another account
+
+    user = User.objects.create_user(username=username, email=email, password=password, first_name=first_name, last_name=last_name)
+
+    is_new_org, error_msg = process_user_organization(user, email)
     if error_msg:
         user.delete()
         return Response({'error': error_msg}, status=status.HTTP_403_FORBIDDEN)
-        
-    refresh = RefreshToken.for_user(user)
-    return Response({
-        'refresh': str(refresh),
-        'access': str(refresh.access_token),
-        'is_new_user': True,
-        'is_new_org': is_new_org
-    })
+
+    return Response(_tokens_for(user, is_new_user=True, is_new_org=is_new_org))
+
 
 @api_view(['POST'])
 @permission_classes([AllowAny])
+@throttle_classes([AuthRateThrottle])
 def microsoft_login(request):
     access_token = request.data.get('access_token')
     if not access_token:
         return Response({'error': 'Missing access token'}, status=status.HTTP_400_BAD_REQUEST)
-        
-    headers = {'Authorization': f'Bearer {access_token}'}
-    graph_response = requests.get('https://graph.microsoft.com/v1.0/me', headers=headers)
-    
+
+    try:
+        graph_response = requests.get(
+            'https://graph.microsoft.com/v1.0/me',
+            headers={'Authorization': f'Bearer {access_token}'},
+            timeout=10,
+        )
+    except requests.RequestException:
+        return Response({'error': 'Could not reach Microsoft to verify your sign-in. Please try again.'}, status=status.HTTP_502_BAD_GATEWAY)
+
     if graph_response.status_code != 200:
-        return Response({
-            'error': 'Invalid Microsoft token',
-            'details': graph_response.json() if graph_response.content else {}
-        }, status=status.HTTP_401_UNAUTHORIZED)
-        
+        return Response({'error': 'Invalid Microsoft token'}, status=status.HTTP_401_UNAUTHORIZED)
+
     data = graph_response.json()
-    email = data.get('mail') or data.get('userPrincipalName')
-    first_name = data.get('givenName', '')
-    last_name = data.get('surname', '')
-    job_title = data.get('jobTitle', '')
-    
+    email = (data.get('mail') or data.get('userPrincipalName') or '').strip().lower()
+    first_name = data.get('givenName') or ''
+    last_name = data.get('surname') or ''
+    job_title = data.get('jobTitle') or ''
+
     if not email:
         return Response({'error': 'Could not extract email from Microsoft account'}, status=status.HTTP_400_BAD_REQUEST)
-    
-    email_clean = email.lower()
-    user = User.objects.filter(email__iexact=email_clean).first() or User.objects.filter(username__iexact=email_clean).first()
-    
+
+    user = User.objects.filter(email__iexact=email).first() or User.objects.filter(username__iexact=email).first()
+
     is_new_user = False
     if not user:
         is_new_user = True
-        user = User.objects.create(
-            username=email_clean,
-            email=email_clean,
-            first_name=first_name,
-            last_name=last_name,
-        )
+        user = User(username=email, email=email, first_name=first_name, last_name=last_name)
         user.set_unusable_password()
         user.save()
     else:
+        if not user.is_active:
+            return Response({'error': 'This account is disabled.'}, status=status.HTTP_403_FORBIDDEN)
+        changed = False
         if not user.first_name and first_name:
-            user.first_name = first_name
+            user.first_name, changed = first_name, True
         if not user.last_name and last_name:
-            user.last_name = last_name
-        user.save()
+            user.last_name, changed = last_name, True
+        if changed:
+            user.save(update_fields=['first_name', 'last_name'])
 
-    is_new_org, error_msg = process_user_organization(user, email_clean, default_job_title=job_title)
+    is_new_org, error_msg = process_user_organization(user, email, default_job_title=job_title)
     if error_msg:
         if is_new_user:
             user.delete()
         return Response({'error': error_msg}, status=status.HTTP_403_FORBIDDEN)
 
-    refresh = RefreshToken.for_user(user)
-    return Response({
-        'refresh': str(refresh),
-        'access': str(refresh.access_token),
-        'is_new_user': is_new_user or is_new_org,
-    })
+    return Response(_tokens_for(user, is_new_user=is_new_user or is_new_org))
+
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def current_user(request):
     from .serializers import UserSerializer
-    serializer = UserSerializer(request.user)
-    return Response(serializer.data)
+    return Response(UserSerializer(request.user).data)

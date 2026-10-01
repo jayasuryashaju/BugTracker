@@ -1,435 +1,600 @@
-from rest_framework import viewsets, status
-from rest_framework.decorators import action
-from rest_framework.response import Response
-from rest_framework.permissions import IsAuthenticated
-from .models import Bug, Attachment, Comment, Organization, OrganizationInvite, Notification, UserProfile, Project, Tag, WorkLog, SavedFilter
-from .serializers import (
-    BugSerializer, AttachmentSerializer, CommentSerializer, UserSerializer,
-    OrganizationSerializer, OrganizationInviteSerializer, NotificationSerializer, ProjectSerializer,
-    TagSerializer, WorkLogSerializer, SavedFilterSerializer
-)
-from django.contrib.auth.models import User
-from rest_framework.parsers import MultiPartParser, FormParser
-from django_filters.rest_framework import DjangoFilterBackend
-from rest_framework.filters import SearchFilter, OrderingFilter
+from datetime import timedelta
 
-from channels.layers import get_channel_layer
+import django_filters
 from asgiref.sync import async_to_sync
+from channels.layers import get_channel_layer
+from django.contrib.auth.models import User
+from django.db.models import Case, Count, IntegerField, Q, Value, When
+from django.utils import timezone
+from django_filters.rest_framework import DjangoFilterBackend
+from rest_framework import mixins, status, viewsets
+from rest_framework.decorators import action
+from rest_framework.exceptions import PermissionDenied
+from rest_framework.filters import OrderingFilter, SearchFilter
+from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.response import Response
 
-def broadcast_bug_event(bug, action):
-    if not bug.organization:
-        return
+from .models import (
+    Attachment, Bug, BugActivityLog, Comment, Notification, Organization,
+    OrganizationInvite, Project, SavedFilter, Tag, UserProfile, WorkLog,
+)
+from .permissions import can_manage, get_org, get_role, is_admin, visible_bugs
+from .serializers import (
+    AttachmentSerializer, BugListSerializer, BugSerializer, CommentSerializer,
+    NotificationSerializer, OrganizationInviteSerializer, OrganizationSerializer,
+    ProjectSerializer, SavedFilterSerializer, TagSerializer, UserSerializer,
+    WorkLogSerializer,
+)
+
+PRIORITY_RANK = Case(
+    When(priority='Critical', then=Value(4)),
+    When(priority='High', then=Value(3)),
+    When(priority='Medium', then=Value(2)),
+    When(priority='Low', then=Value(1)),
+    default=Value(0),
+    output_field=IntegerField(),
+)
+
+
+def display_name(user):
+    full = f"{user.first_name} {user.last_name}".strip()
+    return full or user.username
+
+
+def _send_to_group(group, payload):
     channel_layer = get_channel_layer()
     if channel_layer:
-        serializer = BugSerializer(bug)
-        async_to_sync(channel_layer.group_send)(
-            f'org_{bug.organization.id}',
-            {
-                'type': 'send_bug_event',
-                'data': {
-                    'action': action,
-                    'bug': serializer.data
-                }
-            }
-        )
+        try:
+            async_to_sync(channel_layer.group_send)(group, payload)
+        except Exception:  # realtime is best-effort and must never break a request
+            pass
+
+
+def broadcast_bug_event(bug, action_name):
+    """Tell connected clients that a bug changed.
+
+    Only the id is sent; clients refetch through the normal API, which applies
+    each user's visibility rules (Developers must not receive other people's bugs).
+    """
+    if not bug.organization_id:
+        return
+    _send_to_group(f'org_{bug.organization_id}', {
+        'type': 'send_bug_event',
+        'data': {'action': action_name, 'bug': {'id': str(bug.id)}},
+    })
+
 
 def create_notification(recipient, actor, bug, notification_type, title, message):
-    if recipient and recipient != actor:
-        notification = Notification.objects.create(
-            recipient=recipient,
-            actor=actor,
-            bug=bug,
-            notification_type=notification_type,
-            title=title,
-            message=message
-        )
-        
-        channel_layer = get_channel_layer()
-        if channel_layer:
-            async_to_sync(channel_layer.group_send)(
-                f'user_{recipient.id}',
-                {
-                    'type': 'send_notification',
-                    'notification': {
-                        'id': str(notification.id),
-                        'title': notification.title,
-                        'message': notification.message,
-                        'notification_type': notification.notification_type,
-                        'is_read': notification.is_read,
-                        'created_at': notification.created_at.isoformat(),
-                        'actor_name': actor.first_name or actor.username if actor else 'System',
-                        'bug': str(bug.id) if bug else None,
-                    }
-                }
-            )
+    if not recipient or recipient == actor:
+        return None
+    notification = Notification.objects.create(
+        recipient=recipient, actor=actor, bug=bug,
+        notification_type=notification_type, title=title, message=message,
+    )
+    _send_to_group(f'user_{recipient.id}', {
+        'type': 'send_notification',
+        'notification': {
+            'id': str(notification.id),
+            'title': notification.title,
+            'message': notification.message,
+            'notification_type': notification.notification_type,
+            'is_read': notification.is_read,
+            'created_at': notification.created_at.isoformat(),
+            'actor': {'id': actor.id, 'username': actor.username, 'first_name': actor.first_name, 'last_name': actor.last_name},
+            'bug': str(bug.id) if bug else None,
+        },
+    })
+    return notification
 
-class OrganizationViewSet(viewsets.ModelViewSet):
+
+def require_org(user):
+    org = get_org(user)
+    if org is None:
+        raise PermissionDenied('You are not part of an organization.')
+    return org
+
+
+class OrganizationViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, viewsets.GenericViewSet):
     serializer_class = OrganizationSerializer
     permission_classes = [IsAuthenticated]
-    http_method_names = ['get', 'put', 'patch', 'head', 'options']
 
     def get_queryset(self):
-        user = self.request.user
-        if hasattr(user, 'profile') and user.profile.organization:
-            return Organization.objects.filter(id=user.profile.organization.id)
-        return Organization.objects.none()
+        org = get_org(self.request.user)
+        return Organization.objects.filter(id=org.id) if org else Organization.objects.none()
 
     @action(detail=False, methods=['get', 'patch', 'put'])
     def current(self, request):
-        user = request.user
-        if not hasattr(user, 'profile') or not user.profile.organization:
-            return Response({'error': 'No organization found'}, status=400)
-            
-        org = user.profile.organization
-        if request.method in ['PATCH', 'PUT']:
-            role = user.profile.role
-            if role != 'Admin' and not user.is_superuser:
-                return Response({'error': 'Only Organization Admins can edit organization settings.'}, status=403)
-            serializer = OrganizationSerializer(org, data=request.data, partial=True)
-            if serializer.is_valid():
-                serializer.save()
-                return Response(serializer.data)
-            return Response(serializer.errors, status=400)
+        org = get_org(request.user)
+        if org is None:
+            return Response({'error': 'No organization found'}, status=status.HTTP_400_BAD_REQUEST)
 
-        serializer = OrganizationSerializer(org)
-        return Response(serializer.data)
+        if request.method in ('PATCH', 'PUT'):
+            if not is_admin(request.user):
+                return Response({'error': 'Only Organization Admins can edit organization settings.'}, status=status.HTTP_403_FORBIDDEN)
+            serializer = OrganizationSerializer(org, data=request.data, partial=True)
+            serializer.is_valid(raise_exception=True)
+            serializer.save()
+            return Response(serializer.data)
+
+        return Response(OrganizationSerializer(org).data)
+
 
 class ProjectViewSet(viewsets.ModelViewSet):
     serializer_class = ProjectSerializer
     permission_classes = [IsAuthenticated]
+    filter_backends = [SearchFilter]
+    search_fields = ['name', 'description', 'prefix']
 
     def get_queryset(self):
         user = self.request.user
-        if not hasattr(user, 'profile') or not user.profile.organization:
+        org = get_org(user)
+        if org is None:
             return Project.objects.none()
 
-        org = user.profile.organization
-        role = user.profile.role
+        qs = (
+            Project.objects.select_related('created_by', 'organization', 'created_by__profile')
+            .prefetch_related('members', 'members__profile')
+            .annotate(
+                bug_total=Count('bugs', distinct=True),
+                bug_open=Count('bugs', filter=Q(bugs__status__in=['Open', 'In Progress']), distinct=True),
+            )
+            .filter(organization=org)
+            .order_by('-created_at')
+        )
+        if can_manage(user):
+            return qs
+        return qs.filter(members=user)
 
-        qs = Project.objects.select_related('created_by', 'organization', 'created_by__profile').prefetch_related('members').order_by('-created_at')
-        if role in ['Admin', 'Manager'] or user.is_superuser:
-            return qs.filter(organization=org)
-
-        return qs.filter(organization=org, members=user).distinct()
-
-    def create(self, request, *args, **kwargs):
-        role = request.user.profile.role if hasattr(request.user, 'profile') else 'Developer'
-        if role not in ['Admin', 'Manager'] and not request.user.is_superuser:
-            return Response({'detail': 'Only Admins and Managers can create projects.'}, status=status.HTTP_403_FORBIDDEN)
-        return super().create(request, *args, **kwargs)
+    def _require_manager(self):
+        if not can_manage(self.request.user):
+            raise PermissionDenied('Only Admins and Managers can manage projects.')
 
     def perform_create(self, serializer):
+        self._require_manager()
         user = self.request.user
-        org = user.profile.organization
-        serializer.save(organization=org, created_by=user)
+        serializer.save(organization=require_org(user), created_by=user)
 
-class UserViewSet(viewsets.ModelViewSet):
-    queryset = User.objects.all()
+    def perform_update(self, serializer):
+        self._require_manager()
+        serializer.save()
+
+    def perform_destroy(self, instance):
+        self._require_manager()
+        instance.delete()
+
+
+class UserViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, mixins.UpdateModelMixin, viewsets.GenericViewSet):
     serializer_class = UserSerializer
     permission_classes = [IsAuthenticated]
-    http_method_names = ['get', 'put', 'patch', 'head', 'options']
+    filter_backends = [SearchFilter]
+    search_fields = ['username', 'first_name', 'last_name', 'email']
 
     def get_queryset(self):
         user = self.request.user
-        if hasattr(user, 'profile') and user.profile.organization:
-            return User.objects.filter(profile__organization=user.profile.organization, profile__status='Active')
-        return User.objects.filter(id=user.id)
+        org = get_org(user)
+        if org is None:
+            return User.objects.filter(id=user.id)
+        return (
+            User.objects.filter(profile__organization=org, profile__status='Active')
+            .select_related('profile', 'profile__organization')
+            .order_by('first_name', 'username')
+        )
 
-class OrganizationInviteViewSet(viewsets.ModelViewSet):
+    def update(self, request, *args, **kwargs):
+        # PUT behaves like PATCH: the client only sends what it wants to change.
+        kwargs['partial'] = True
+        return super().update(request, *args, **kwargs)
+
+    def perform_update(self, serializer):
+        actor = self.request.user
+        target = serializer.instance
+        if target.pk != actor.pk and not is_admin(actor):
+            raise PermissionDenied('You can only edit your own profile.')
+
+        profile_data = self.request.data.get('profile') or {}
+        target_profile = getattr(target, 'profile', None)
+        for field in ('role', 'status'):
+            if field in profile_data and target_profile and profile_data[field] != getattr(target_profile, field):
+                if not is_admin(actor):
+                    raise PermissionDenied('Only Organization Admins can change roles.')
+        serializer.save()
+
+
+class OrganizationInviteViewSet(mixins.ListModelMixin, mixins.CreateModelMixin, mixins.DestroyModelMixin, viewsets.GenericViewSet):
     serializer_class = OrganizationInviteSerializer
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
-        user = self.request.user
-        if hasattr(user, 'profile') and user.profile.organization:
-            return OrganizationInvite.objects.filter(organization=user.profile.organization)
-        return OrganizationInvite.objects.none()
+        org = get_org(self.request.user)
+        if org is None:
+            return OrganizationInvite.objects.none()
+        return OrganizationInvite.objects.filter(organization=org).select_related('invited_by', 'organization').order_by('-created_at')
 
-    def perform_create(self, serializer):
-        user = self.request.user
-        org = user.profile.organization
-        email = serializer.validated_data.get('email')
-        role = serializer.validated_data.get('role', 'Developer')
-
-        existing = OrganizationInvite.objects.filter(organization=org, email__iexact=email).first()
-        if existing:
-            existing.role = role
-            existing.accepted = False
-            existing.invited_by = user
-            existing.save()
-        else:
-            serializer.save(organization=org, invited_by=user)
-
-class BugViewSet(viewsets.ModelViewSet):
-    serializer_class = BugSerializer
-    permission_classes = [IsAuthenticated]
-    filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
-    filterset_fields = ['status', 'priority', 'assigned_to', 'project']
-    search_fields = ['title', 'description']
-    ordering_fields = ['created_at', 'priority']
-
-    def get_queryset(self):
-        user = self.request.user
-        if not hasattr(user, 'profile') or not user.profile.organization:
-            return Bug.objects.none()
-
-        org = user.profile.organization
-        role = user.profile.role
-
-        base_qs = Bug.objects.select_related(
-            'created_by', 'created_by__profile', 'created_by__profile__organization',
-            'assigned_to', 'assigned_to__profile', 'assigned_to__profile__organization',
-            'project', 'project__organization', 'project__created_by'
-        ).prefetch_related(
-            'attachments', 'attachments__uploaded_by',
-            'comments', 'comments__author', 'comments__replies',
-            'activity_logs', 'activity_logs__actor',
-            'tags',
-            'linked_bugs',
-            'work_logs', 'work_logs__user'
-        ).filter(organization=org).order_by('-created_at')
-
-        # Developers only see bugs assigned to them
-        if role == 'Developer':
-            return base_qs.filter(assigned_to=user)
-
-        return base_qs
+    def _require_manager(self):
+        if not can_manage(self.request.user):
+            raise PermissionDenied('Only Admins and Managers can manage invites.')
 
     def create(self, request, *args, **kwargs):
-        return super().create(request, *args, **kwargs)
+        self._require_manager()
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        user = request.user
+        org = require_org(user)
+        email = serializer.validated_data['email']
+        role = serializer.validated_data.get('role', 'Developer')
+
+        if role == 'Admin' and not is_admin(user):
+            raise PermissionDenied('Only Admins can invite other Admins.')
+        if UserProfile.objects.filter(organization=org, user__email__iexact=email).exists():
+            return Response({'email': ['This person is already a member of your organization.']}, status=status.HTTP_400_BAD_REQUEST)
+
+        invite = OrganizationInvite.objects.filter(organization=org, email__iexact=email).first()
+        if invite:
+            invite.role = role
+            invite.accepted = False
+            invite.invited_by = user
+            invite.save()
+            code = status.HTTP_200_OK
+        else:
+            invite = serializer.save(organization=org, invited_by=user)
+            code = status.HTTP_201_CREATED
+        return Response(self.get_serializer(invite).data, status=code)
+
+    def perform_destroy(self, instance):
+        self._require_manager()
+        instance.delete()
+
+
+class BugFilter(django_filters.FilterSet):
+    overdue = django_filters.BooleanFilter(method='filter_overdue')
+    unassigned = django_filters.BooleanFilter(method='filter_unassigned')
+    mine = django_filters.BooleanFilter(method='filter_mine')
+
+    class Meta:
+        model = Bug
+        fields = ['status', 'priority', 'assigned_to', 'project', 'created_by', 'tags']
+
+    def filter_overdue(self, queryset, name, value):
+        if not value:
+            return queryset
+        return queryset.filter(due_date__lt=timezone.localdate()).exclude(status__in=['Resolved', 'Closed'])
+
+    def filter_unassigned(self, queryset, name, value):
+        return queryset.filter(assigned_to__isnull=True) if value else queryset
+
+    def filter_mine(self, queryset, name, value):
+        return queryset.filter(assigned_to=self.request.user) if value else queryset
+
+
+class BugViewSet(viewsets.ModelViewSet):
+    permission_classes = [IsAuthenticated]
+    filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
+    filterset_class = BugFilter
+    search_fields = ['title', 'description', 'display_id']
+    ordering_fields = ['created_at', 'updated_at', 'priority_rank', 'due_date', 'title', 'status']
+
+    def get_serializer_class(self):
+        return BugListSerializer if self.action == 'list' else BugSerializer
+
+    def get_queryset(self):
+        qs = visible_bugs(self.request.user).select_related(
+            'created_by', 'created_by__profile', 'created_by__profile__organization',
+            'assigned_to', 'assigned_to__profile', 'assigned_to__profile__organization',
+            'project',
+        ).prefetch_related('tags').annotate(priority_rank=PRIORITY_RANK)
+
+        if self.action == 'list':
+            qs = qs.annotate(comment_total=Count('comments', distinct=True))
+        else:
+            qs = qs.prefetch_related(
+                'attachments', 'attachments__uploaded_by',
+                'comments', 'comments__author', 'comments__author__profile', 'comments__replies',
+                'activity_logs', 'activity_logs__actor',
+                'linked_bugs', 'work_logs', 'work_logs__user',
+            )
+        return qs.order_by('-created_at')
+
+    def _check_can_edit(self, bug, user):
+        if can_manage(user) or get_role(user) == 'Tester':
+            return
+        if bug.created_by_id == user.id or bug.assigned_to_id == user.id:
+            return
+        raise PermissionDenied('You do not have permission to edit this bug.')
 
     def perform_create(self, serializer):
         user = self.request.user
-        org = user.profile.organization if hasattr(user, 'profile') else None
-        bug = serializer.save(created_by=user, organization=org)
+        bug = serializer.save(created_by=user, organization=require_org(user))
 
-        from .models import BugActivityLog
-        BugActivityLog.objects.create(
-            bug=bug,
-            actor=user,
-            action="Created",
-            old_value="",
-            new_value="Bug created"
-        )
+        BugActivityLog.objects.create(bug=bug, actor=user, action="Created", old_value="", new_value="Bug created")
 
         if bug.assigned_to:
             create_notification(
-                recipient=bug.assigned_to,
-                actor=user,
-                bug=bug,
-                notification_type='Assigned',
-                title='New Bug Assigned',
-                message=f"You have been assigned to bug '{bug.title}'."
+                recipient=bug.assigned_to, actor=user, bug=bug,
+                notification_type='Assigned', title='New bug assigned',
+                message=f"You have been assigned to {bug.display_id}: '{bug.title}'.",
             )
 
         broadcast_bug_event(bug, 'created')
 
     def perform_update(self, serializer):
-        old_bug = self.get_object()
-        old_status = old_bug.status
-        old_assignee = old_bug.assigned_to
-        old_priority = old_bug.priority
-        old_due_date = old_bug.due_date
+        user = self.request.user
+        old = serializer.instance
+        self._check_can_edit(old, user)
+
+        old_status = old.status
+        old_assignee = old.assigned_to
+        old_priority = old.priority
+        old_due_date = old.due_date
 
         bug = serializer.save()
-        user = self.request.user
-
-        from .models import BugActivityLog
 
         if old_status != bug.status:
             BugActivityLog.objects.create(bug=bug, actor=user, action="Status Changed", old_value=old_status, new_value=bug.status)
-            
-            recipient = bug.created_by if user != bug.created_by else bug.assigned_to
-            create_notification(
-                recipient=recipient,
-                actor=user,
-                bug=bug,
-                notification_type='StatusChanged',
-                title='Bug Status Updated',
-                message=f"Bug '{bug.title}' status changed from '{old_status}' to '{bug.status}'."
-            )
+            for recipient in {bug.created_by, bug.assigned_to} - {None, user}:
+                create_notification(
+                    recipient=recipient, actor=user, bug=bug,
+                    notification_type='StatusChanged', title='Bug status updated',
+                    message=f"{bug.display_id} '{bug.title}' moved from {old_status} to {bug.status}.",
+                )
 
         if old_assignee != bug.assigned_to:
-            old_name = old_assignee.username if old_assignee else "Unassigned"
-            new_name = bug.assigned_to.username if bug.assigned_to else "Unassigned"
+            old_name = display_name(old_assignee) if old_assignee else "Unassigned"
+            new_name = display_name(bug.assigned_to) if bug.assigned_to else "Unassigned"
             BugActivityLog.objects.create(bug=bug, actor=user, action="Assignee Changed", old_value=old_name, new_value=new_name)
 
-            if bug.assigned_to:
-                create_notification(
-                    recipient=bug.assigned_to,
-                    actor=user,
-                    bug=bug,
-                    notification_type='Assigned',
-                    title='Bug Assigned',
-                    message=f"You have been assigned to bug '{bug.title}'."
-                )
+            create_notification(
+                recipient=bug.assigned_to, actor=user, bug=bug,
+                notification_type='Assigned', title='Bug assigned to you',
+                message=f"You have been assigned to {bug.display_id}: '{bug.title}'.",
+            )
 
         if old_priority != bug.priority:
             BugActivityLog.objects.create(bug=bug, actor=user, action="Priority Changed", old_value=old_priority, new_value=bug.priority)
 
         if old_due_date != bug.due_date:
             BugActivityLog.objects.create(
-                bug=bug, 
-                actor=user, 
-                action="Due Date Changed", 
-                old_value=str(old_due_date) if old_due_date else "None", 
-                new_value=str(bug.due_date) if bug.due_date else "None"
+                bug=bug, actor=user, action="Due Date Changed",
+                old_value=str(old_due_date) if old_due_date else "None",
+                new_value=str(bug.due_date) if bug.due_date else "None",
             )
-            
+
         broadcast_bug_event(bug, 'updated')
 
     def perform_destroy(self, instance):
+        user = self.request.user
+        if not (can_manage(user) or instance.created_by_id == user.id):
+            raise PermissionDenied('Only Admins, Managers or the reporter can delete a bug.')
         broadcast_bug_event(instance, 'deleted')
         instance.delete()
 
     @action(detail=False, methods=['get'])
     def analytics(self, request):
-        user = request.user
-        if not hasattr(user, 'profile') or not user.profile.organization:
-            return Response({'error': 'No organization found'}, status=400)
-            
-        org = user.profile.organization
-        bugs = Bug.objects.filter(organization=org)
-        
-        total = bugs.count()
-        open_count = bugs.filter(status='Open').count()
-        in_progress = bugs.filter(status='In Progress').count()
-        resolved = bugs.filter(status='Resolved').count()
-        closed = bugs.filter(status='Closed').count()
-        
-        priority_low = bugs.filter(priority='Low').count()
-        priority_medium = bugs.filter(priority='Medium').count()
-        priority_high = bugs.filter(priority='High').count()
-        priority_critical = bugs.filter(priority='Critical').count()
-        
-        from django.utils import timezone
-        from datetime import timedelta
-        
-        today = timezone.now().date()
+        org = get_org(request.user)
+        if org is None:
+            return Response({'error': 'No organization found'}, status=status.HTTP_400_BAD_REQUEST)
+
+        bugs = visible_bugs(request.user)
+        today = timezone.localdate()
+
+        by_status = dict(bugs.values_list('status').annotate(n=Count('id')))
+        by_priority = dict(bugs.values_list('priority').annotate(n=Count('id')))
+        total = sum(by_status.values())
+        resolved = by_status.get('Resolved', 0)
+        closed = by_status.get('Closed', 0)
+
+        try:
+            days = max(7, min(int(request.query_params.get('days', 14)), 90))
+        except ValueError:
+            days = 14
+        start = today - timedelta(days=days - 1)
+
+        created_per_day = dict(
+            bugs.filter(created_at__date__gte=start).values_list('created_at__date').annotate(n=Count('id'))
+        )
+        resolved_per_day = dict(
+            BugActivityLog.objects.filter(
+                bug__in=bugs, action='Status Changed', new_value__in=['Resolved', 'Closed'], created_at__date__gte=start,
+            ).values_list('created_at__date').annotate(n=Count('id'))
+        )
         trend = []
-        for i in range(6, -1, -1):
-            day = today - timedelta(days=i)
-            next_day = day + timedelta(days=1)
-            count = bugs.filter(created_at__gte=day, created_at__lt=next_day).count()
-            trend.append({'name': day.strftime('%b %d'), 'bugs': count})
-        
+        for i in range(days):
+            day = start + timedelta(days=i)
+            trend.append({
+                'date': day.isoformat(),
+                'name': day.strftime('%b %d'),
+                'created': created_per_day.get(day, 0),
+                'resolved': resolved_per_day.get(day, 0),
+            })
+
+        open_bugs = bugs.exclude(status__in=['Resolved', 'Closed'])
         return Response({
             'total': total,
             'status_breakdown': {
-                'open': open_count,
-                'in_progress': in_progress,
+                'open': by_status.get('Open', 0),
+                'in_progress': by_status.get('In Progress', 0),
                 'resolved': resolved,
                 'closed': closed,
             },
             'priority_breakdown': {
-                'low': priority_low,
-                'medium': priority_medium,
-                'high': priority_high,
-                'critical': priority_critical,
+                'low': by_priority.get('Low', 0),
+                'medium': by_priority.get('Medium', 0),
+                'high': by_priority.get('High', 0),
+                'critical': by_priority.get('Critical', 0),
             },
+            'overdue': open_bugs.filter(due_date__lt=today).count(),
+            'unassigned': open_bugs.filter(assigned_to__isnull=True).count(),
+            'assigned_to_me': open_bugs.filter(assigned_to=request.user).count(),
             'trend': trend,
-            'resolution_rate': round((resolved + closed) / total * 100, 1) if total > 0 else 0
+            'resolution_rate': round((resolved + closed) / total * 100, 1) if total else 0,
         })
 
-class AttachmentViewSet(viewsets.ModelViewSet):
+
+class AttachmentViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, mixins.CreateModelMixin,
+                        mixins.DestroyModelMixin, viewsets.GenericViewSet):
     serializer_class = AttachmentSerializer
     permission_classes = [IsAuthenticated]
     parser_classes = (MultiPartParser, FormParser)
 
     def get_queryset(self):
-        user = self.request.user
-        if not hasattr(user, 'profile') or not user.profile.organization:
-            return Attachment.objects.none()
-        return Attachment.objects.filter(bug__organization=user.profile.organization).order_by('-uploaded_at')
+        qs = Attachment.objects.filter(bug__in=visible_bugs(self.request.user)).select_related('uploaded_by', 'uploaded_by__profile')
+        bug = self.request.query_params.get('bug')
+        if bug:
+            qs = qs.filter(bug_id=bug)
+        return qs.order_by('-uploaded_at')
 
     def perform_create(self, serializer):
+        attachment = serializer.save(uploaded_by=self.request.user)
+        BugActivityLog.objects.create(
+            bug=attachment.bug, actor=self.request.user, action="Attachment Added",
+            old_value="", new_value=serializer.get_filename(attachment),
+        )
+        broadcast_bug_event(attachment.bug, 'updated')
+
+    def perform_destroy(self, instance):
         user = self.request.user
-        serializer.save(uploaded_by=user)
+        if not (can_manage(user) or instance.uploaded_by_id == user.id):
+            raise PermissionDenied('Only the uploader or a manager can remove attachments.')
+        bug = instance.bug
+        instance.file.delete(save=False)
+        instance.delete()
+        broadcast_bug_event(bug, 'updated')
+
 
 class CommentViewSet(viewsets.ModelViewSet):
     serializer_class = CommentSerializer
     permission_classes = [IsAuthenticated]
+    parser_classes = (JSONParser, FormParser, MultiPartParser)
 
     def get_queryset(self):
-        user = self.request.user
-        if not hasattr(user, 'profile') or not user.profile.organization:
-            return Comment.objects.none()
-        return Comment.objects.filter(bug__organization=user.profile.organization).order_by('-created_at')
+        qs = Comment.objects.filter(bug__in=visible_bugs(self.request.user)).select_related('author', 'author__profile')
+        bug = self.request.query_params.get('bug')
+        if bug:
+            qs = qs.filter(bug_id=bug)
+        return qs.order_by('-created_at')
 
     def perform_create(self, serializer):
         user = self.request.user
         comment = serializer.save(author=user)
         bug = comment.bug
 
-        recipient = bug.assigned_to if user == bug.created_by else bug.created_by
-        if recipient:
+        recipients = {bug.created_by, bug.assigned_to}
+        if comment.parent:
+            recipients.add(comment.parent.author)
+        snippet = comment.content if len(comment.content) <= 80 else comment.content[:77] + '...'
+        for recipient in recipients - {None, user}:
             create_notification(
-                recipient=recipient,
-                actor=user,
-                bug=bug,
-                notification_type='Commented',
-                title='New Comment on Bug',
-                message=f"{user.first_name or user.username} commented on '{bug.title}': {comment.content[:50]}"
+                recipient=recipient, actor=user, bug=bug,
+                notification_type='Commented', title='New comment',
+                message=f"{display_name(user)} commented on {bug.display_id}: {snippet}",
             )
-        
-        # Broadcast the update so frontends reload the bug comments
+
         broadcast_bug_event(bug, 'updated')
 
-class NotificationViewSet(viewsets.ReadOnlyModelViewSet):
+    def _require_author(self, comment):
+        user = self.request.user
+        if comment.author_id != user.id and not is_admin(user):
+            raise PermissionDenied('You can only change your own comments.')
+
+    def perform_update(self, serializer):
+        self._require_author(serializer.instance)
+        serializer.save()
+        broadcast_bug_event(serializer.instance.bug, 'updated')
+
+    def perform_destroy(self, instance):
+        self._require_author(instance)
+        bug = instance.bug
+        instance.delete()
+        broadcast_bug_event(bug, 'updated')
+
+
+class NotificationViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, viewsets.GenericViewSet):
     serializer_class = NotificationSerializer
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
-        return Notification.objects.filter(recipient=self.request.user)
+        return Notification.objects.filter(recipient=self.request.user).select_related('actor', 'actor__profile')
 
     @action(detail=True, methods=['post'])
     def mark_read(self, request, pk=None):
-        try:
-            notification = self.get_object()
-            notification.is_read = True
-            notification.save()
-            return Response({'status': 'notification marked as read'})
-        except Notification.DoesNotExist:
-            return Response(status=404)
+        notification = self.get_object()
+        notification.is_read = True
+        notification.save(update_fields=['is_read'])
+        return Response({'status': 'notification marked as read'})
 
     @action(detail=False, methods=['post'])
     def read_all(self, request):
         Notification.objects.filter(recipient=request.user, is_read=False).update(is_read=True)
         return Response({'status': 'all notifications marked as read'})
 
+    @action(detail=False, methods=['get'])
+    def unread_count(self, request):
+        return Response({'count': self.get_queryset().filter(is_read=False).count()})
+
+
 class TagViewSet(viewsets.ModelViewSet):
     serializer_class = TagSerializer
     permission_classes = [IsAuthenticated]
+    pagination_class = None
 
     def get_queryset(self):
-        user = self.request.user
-        if not hasattr(user, 'profile') or not user.profile.organization:
-            from .models import Tag
+        org = get_org(self.request.user)
+        if org is None:
             return Tag.objects.none()
-        from .models import Tag
-        return Tag.objects.filter(organization=user.profile.organization)
+        return Tag.objects.filter(organization=org).order_by('name')
+
+    def _require_manager(self):
+        if not can_manage(self.request.user):
+            raise PermissionDenied('Only Admins and Managers can manage tags.')
 
     def perform_create(self, serializer):
-        user = self.request.user
-        org = user.profile.organization if hasattr(user, 'profile') else None
-        serializer.save(organization=org)
+        self._require_manager()
+        serializer.save(organization=require_org(self.request.user))
+
+    def perform_update(self, serializer):
+        self._require_manager()
+        serializer.save()
+
+    def perform_destroy(self, instance):
+        self._require_manager()
+        instance.delete()
+
 
 class WorkLogViewSet(viewsets.ModelViewSet):
     serializer_class = WorkLogSerializer
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
-        user = self.request.user
-        if hasattr(user, 'profile') and user.profile.organization:
-            return WorkLog.objects.filter(bug__organization=user.profile.organization)
-        return WorkLog.objects.none()
+        qs = WorkLog.objects.filter(bug__in=visible_bugs(self.request.user)).select_related('user', 'user__profile')
+        bug = self.request.query_params.get('bug')
+        if bug:
+            qs = qs.filter(bug_id=bug)
+        return qs
 
     def perform_create(self, serializer):
-        serializer.save(user=self.request.user)
+        log = serializer.save(user=self.request.user)
+        broadcast_bug_event(log.bug, 'updated')
+
+    def _require_owner(self, log):
+        user = self.request.user
+        if log.user_id != user.id and not is_admin(user):
+            raise PermissionDenied('You can only change your own time entries.')
+
+    def perform_update(self, serializer):
+        self._require_owner(serializer.instance)
+        serializer.save()
+
+    def perform_destroy(self, instance):
+        self._require_owner(instance)
+        bug = instance.bug
+        instance.delete()
+        broadcast_bug_event(bug, 'updated')
+
 
 class SavedFilterViewSet(viewsets.ModelViewSet):
     serializer_class = SavedFilterSerializer
     permission_classes = [IsAuthenticated]
+    pagination_class = None
 
     def get_queryset(self):
         return SavedFilter.objects.filter(user=self.request.user)
