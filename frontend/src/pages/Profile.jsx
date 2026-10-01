@@ -34,7 +34,7 @@ const Profile = () => {
 
   const org = user?.profile?.organization;
   return (
-    <div className="page--narrow" style={{ margin: '0 auto' }}>
+    <div>
       <PageHead title="My profile" subtitle="How you appear to your teammates." />
       <form className="card" onSubmit={submit}>
         <div className="card__body stack" style={{ gap: 20 }}>

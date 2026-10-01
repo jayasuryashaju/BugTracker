@@ -18,7 +18,7 @@ const Notifications = () => {
   };
 
   return (
-    <div className="page--narrow" style={{ margin: '0 auto' }}>
+    <div>
       <PageHead title="Notifications" subtitle="Assignments, status changes and comments on your bugs."
         actions={<button className="btn btn--secondary" onClick={markAllRead} disabled={unread === 0}><CheckCheck size={15} /> Mark all read</button>} />
       <div className="segmented" style={{ marginBottom: 16 }}>

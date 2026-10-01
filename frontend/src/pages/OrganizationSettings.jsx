@@ -57,9 +57,9 @@ const OrganizationSettings = () => {
   };
 
   return (
-    <div className="page--narrow" style={{ margin: '0 auto' }}>
+    <div>
       <PageHead title="Organization" subtitle="Settings that apply to everyone in your workspace." />
-      <div className="stack">
+      <div className="two-col">
         <section className="card">
           <div className="card__head"><Building size={16} style={{ color: 'var(--text-3)' }} /><h2>Profile</h2></div>
           <form className="card__body stack" onSubmit={saveName}>

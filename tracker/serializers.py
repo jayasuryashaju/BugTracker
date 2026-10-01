@@ -9,7 +9,7 @@ from .models import (
 )
 from .permissions import get_org, visible_bugs
 
-MAX_ATTACHMENT_BYTES = 25 * 1024 * 1024
+MAX_ATTACHMENT_BYTES = 100 * 1024 * 1024
 BLOCKED_EXTENSIONS = {
     '.html', '.htm', '.xhtml', '.svg', '.js', '.mjs', '.exe', '.bat', '.cmd', '.com',
     '.msi', '.scr', '.sh', '.php', '.jar', '.vbs', '.ps1',
@@ -193,7 +193,7 @@ class AttachmentSerializer(serializers.ModelSerializer):
 
     def validate_file(self, f):
         if f.size > MAX_ATTACHMENT_BYTES:
-            raise serializers.ValidationError('Files must be 25 MB or smaller.')
+            raise serializers.ValidationError('Files must be 100 MB or smaller.')
         ext = os.path.splitext(f.name)[1].lower()
         if ext in BLOCKED_EXTENSIONS:
             raise serializers.ValidationError(f'{ext} files are not allowed.')

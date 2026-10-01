@@ -1,23 +1,19 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { File as FileIcon, Upload, X } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api from '../api';
 import { errorMessage, fullName, PRIORITIES, unwrap } from '../lib/utils';
 import MarkdownEditor from '../components/MarkdownEditor';
+import { MediaPicker } from '../components/Media';
 import { PageHead } from '../components/ui';
-
-const MAX_BYTES = 25 * 1024 * 1024;
 
 const BugCreate = () => {
   const navigate = useNavigate();
   const [params] = useSearchParams();
-  const fileInput = useRef(null);
   const [people, setPeople] = useState([]);
   const [projects, setProjects] = useState([]);
   const [tags, setTags] = useState([]);
   const [files, setFiles] = useState([]);
-  const [dragging, setDragging] = useState(false);
   const [busy, setBusy] = useState(false);
   const [form, setForm] = useState({
     title: '', description: '', steps_to_reproduce: '', priority: 'Medium',
@@ -33,15 +29,6 @@ const BugCreate = () => {
     });
   }, []);
 
-  const addFiles = (list) => {
-    const next = [];
-    Array.from(list).forEach((f) => {
-      if (f.size > MAX_BYTES) toast.error(`${f.name} is larger than 25 MB`);
-      else next.push(f);
-    });
-    setFiles((current) => [...current, ...next]);
-  };
-
   const submit = async (e) => {
     e.preventDefault();
     if (!form.description.trim()) { toast.error('Please describe the bug.'); return; }
@@ -53,13 +40,18 @@ const BugCreate = () => {
       const { data: bug } = await api.post('bugs/', payload);
 
       const failed = [];
-      for (const file of files) {
+      for (let i = 0; i < files.length; i++) {
         const body = new FormData();
         body.append('bug', bug.id);
-        body.append('file', file);
-        try { await api.post('attachments/', body); } catch { failed.push(file.name); }
+        body.append('file', files[i].file);
+        try {
+          await api.post('attachments/', body, { onUploadProgress: (e) => setFiles((list) => list.map((it, j) => (j === i ? { ...it, progress: Math.round((e.loaded / (e.total || e.loaded || 1)) * 100) } : it))) });
+        } catch (err) {
+          failed.push(files[i].file.name);
+          setFiles((list) => list.map((it, j) => (j === i ? { ...it, error: errorMessage(err, 'Upload failed') } : it)));
+        }
       }
-      if (failed.length) toast.error(`Bug created, but these files failed to upload: ${failed.join(', ')}`, { duration: 7000 });
+      if (failed.length) toast.error(`${bug.display_id} created, but ${failed.length} file${failed.length === 1 ? '' : 's'} failed to upload: ${failed.join(', ')}. You can add them on the bug page.`, { duration: 9000 });
       else toast.success(`${bug.display_id} created`);
       navigate(`/bug/${bug.id}`);
     } catch (err) {
@@ -69,90 +61,86 @@ const BugCreate = () => {
   };
 
   return (
-    <div className="page--narrow" style={{ margin: '0 auto' }}>
+    <div>
       <PageHead title="Log a bug" subtitle="Give your team what they need to reproduce and fix it." back={{ to: '/bugs', label: 'All bugs' }} />
-      <form className="card" onSubmit={submit}>
-        <div className="card__body stack" style={{ gap: 20 }}>
-          <div className="field">
-            <label htmlFor="title">Title</label>
-            <input id="title" className="input" required maxLength={255} autoFocus placeholder="A short summary of what's wrong" value={form.title} onChange={set('title')} />
-          </div>
-
-          <div className="field">
-            <label htmlFor="desc">Description</label>
-            <MarkdownEditor id="desc" value={form.description} onChange={(v) => setForm((f) => ({ ...f, description: v }))} placeholder="What happened? What did you expect to happen instead?" />
-          </div>
-
-          <div className="field">
-            <label htmlFor="steps">Steps to reproduce <span className="muted" style={{ fontWeight: 400 }}>(optional)</span></label>
-            <MarkdownEditor id="steps" rows={4} value={form.steps_to_reproduce} onChange={(v) => setForm((f) => ({ ...f, steps_to_reproduce: v }))} placeholder={'1. Go to…\n2. Click…\n3. See the error'} />
-          </div>
-
-          <div className="form-grid">
-            <div className="field">
-              <label htmlFor="prio">Priority</label>
-              <select id="prio" className="select" value={form.priority} onChange={set('priority')}>{PRIORITIES.map((p) => <option key={p}>{p}</option>)}</select>
-            </div>
-            <div className="field">
-              <label htmlFor="proj">Project</label>
-              <select id="proj" className="select" value={form.project} onChange={set('project')}>
-                <option value="">No project</option>
-                {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-              </select>
-            </div>
-            <div className="field">
-              <label htmlFor="who">Assignee</label>
-              <select id="who" className="select" value={form.assigned_to_id} onChange={set('assigned_to_id')}>
-                <option value="">Unassigned</option>
-                {people.map((u) => <option key={u.id} value={u.id}>{fullName(u)} · {u.profile?.role}</option>)}
-              </select>
-            </div>
-            <div className="field">
-              <label htmlFor="due">Due date</label>
-              <input id="due" type="date" className="input" value={form.due_date} onChange={set('due_date')} />
-            </div>
-          </div>
-
-          {tags.length > 0 && (
-            <div className="field">
-              <span className="label">Tags</span>
-              <div className="row row--wrap">
-                {tags.map((t) => {
-                  const on = form.tag_ids.includes(t.id);
-                  return (
-                    <button key={t.id} type="button" className="tag" aria-pressed={on} style={{ '--tag': t.color, cursor: 'pointer', outline: on ? '2px solid var(--tag)' : 'none', outlineOffset: 1 }}
-                      onClick={() => setForm((f) => ({ ...f, tag_ids: on ? f.tag_ids.filter((x) => x !== t.id) : [...f.tag_ids, t.id] }))}>
-                      {t.name}
-                    </button>
-                  );
-                })}
+      <form onSubmit={submit}>
+        <div className="create-grid">
+          <div className="stack">
+            <section className="card">
+              <div className="card__body stack" style={{ gap: 20 }}>
+                <div className="field">
+                  <label htmlFor="title">Title</label>
+                  <input id="title" className="input" required maxLength={255} autoFocus placeholder="A short summary of what's wrong" value={form.title} onChange={set('title')} />
+                </div>
+                <div className="field">
+                  <label htmlFor="desc">Description</label>
+                  <MarkdownEditor id="desc" rows={8} value={form.description} onChange={(v) => setForm((f) => ({ ...f, description: v }))} placeholder="What happened? What did you expect to happen instead?" />
+                </div>
+                <div className="field">
+                  <label htmlFor="steps">Steps to reproduce <span className="muted" style={{ fontWeight: 400 }}>(optional)</span></label>
+                  <MarkdownEditor id="steps" rows={5} value={form.steps_to_reproduce} onChange={(v) => setForm((f) => ({ ...f, steps_to_reproduce: v }))} placeholder={'1. Go to…\n2. Click…\n3. See the error'} />
+                </div>
               </div>
-            </div>
-          )}
-
-          <div className="field">
-            <span className="label">Attachments</span>
-            <button type="button" className="dropzone" data-over={dragging}
-              onClick={() => fileInput.current.click()}
-              onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
-              onDragLeave={() => setDragging(false)}
-              onDrop={(e) => { e.preventDefault(); setDragging(false); addFiles(e.dataTransfer.files); }}>
-              <Upload size={20} style={{ marginBottom: 6 }} />
-              <div>Drop screenshots or recordings here, or <b>browse</b></div>
-              <div className="hint">Images, video, PDF, logs — up to 25 MB each</div>
-            </button>
-            <input ref={fileInput} type="file" multiple hidden onChange={(e) => { addFiles(e.target.files); e.target.value = ''; }} />
-            {files.map((f, i) => (
-              <div key={`${f.name}-${i}`} className="attachment">
-                <FileIcon size={18} /><span className="truncate grow">{f.name}</span><span className="muted">{(f.size / 1024).toFixed(0)} KB</span>
-                <button type="button" className="btn btn--ghost btn--icon btn--sm" aria-label={`Remove ${f.name}`} onClick={() => setFiles((c) => c.filter((_, j) => j !== i))}><X size={15} /></button>
+            </section>
+            <section className="card">
+              <div className="card__head"><h2>Screenshots &amp; recordings</h2><span className="muted spacer">{files.length ? `${files.length} selected` : 'optional'}</span></div>
+              <div className="card__body">
+                <MediaPicker items={files} disabled={busy}
+                  onAdd={(added) => setFiles((list) => [...list, ...added.map((file) => ({ file }))])}
+                  onRemove={(i) => setFiles((list) => list.filter((_, j) => j !== i))} />
               </div>
-            ))}
+            </section>
           </div>
-        </div>
-        <div className="card__body form-actions" style={{ borderTop: '1px solid var(--border)' }}>
-          <button type="button" className="btn btn--secondary" onClick={() => navigate(-1)}>Cancel</button>
-          <button className="btn btn--primary" disabled={busy || !form.title.trim()}>{busy ? 'Creating…' : 'Create bug'}</button>
+
+          <aside className="stack" style={{ position: 'sticky', top: 'calc(var(--topbar-h) + 16px)' }}>
+            <section className="card">
+              <div className="card__head"><h2>Details</h2></div>
+              <div className="card__body stack" style={{ gap: 16 }}>
+                <div className="field">
+                  <label htmlFor="prio">Priority</label>
+                  <select id="prio" className="select" value={form.priority} onChange={set('priority')}>{PRIORITIES.map((p) => <option key={p}>{p}</option>)}</select>
+                </div>
+                <div className="field">
+                  <label htmlFor="proj">Project</label>
+                  <select id="proj" className="select" value={form.project} onChange={set('project')}>
+                    <option value="">No project</option>
+                    {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                  </select>
+                </div>
+                <div className="field">
+                  <label htmlFor="who">Assignee</label>
+                  <select id="who" className="select" value={form.assigned_to_id} onChange={set('assigned_to_id')}>
+                    <option value="">Unassigned</option>
+                    {people.map((u) => <option key={u.id} value={u.id}>{fullName(u)} · {u.profile?.role}</option>)}
+                  </select>
+                </div>
+                <div className="field">
+                  <label htmlFor="due">Due date</label>
+                  <input id="due" type="date" className="input" value={form.due_date} onChange={set('due_date')} />
+                </div>
+                {tags.length > 0 && (
+                  <div className="field">
+                    <span className="label">Tags</span>
+                    <div className="row row--wrap">
+                      {tags.map((t) => {
+                        const on = form.tag_ids.includes(t.id);
+                        return (
+                          <button key={t.id} type="button" className="tag" aria-pressed={on} style={{ '--tag': t.color, cursor: 'pointer', outline: on ? '2px solid var(--tag)' : 'none', outlineOffset: 1 }}
+                            onClick={() => setForm((f) => ({ ...f, tag_ids: on ? f.tag_ids.filter((x) => x !== t.id) : [...f.tag_ids, t.id] }))}>
+                            {t.name}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </section>
+            <div className="row">
+              <button type="button" className="btn btn--secondary" onClick={() => navigate(-1)} disabled={busy}>Cancel</button>
+              <button className="btn btn--primary grow" disabled={busy || !form.title.trim()}>{busy ? (files.length ? 'Creating & uploading…' : 'Creating…') : 'Create bug'}</button>
+            </div>
+          </aside>
         </div>
       </form>
     </div>

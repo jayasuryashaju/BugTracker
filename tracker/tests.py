@@ -256,7 +256,7 @@ class BugBehaviourTests(BaseTestCase):
         self.assertEqual([b['title'] for b in results(self.client.get('/api/bugs/?overdue=true'))], ['Late'])
         self.assertEqual(len(results(self.client.get('/api/bugs/?unassigned=true'))), 2)
         self.assertEqual(len(results(self.client.get(f'/api/bugs/?mine=true'))), 0)
-        self.assertEqual(len(results(self.client.get('/api/bugs/?search=BUG-1'))), 0)
+        self.assertEqual(len(results(self.client.get('/api/bugs/?search=NOPE-1'))), 0)
         self.assertEqual(len(results(self.client.get(f'/api/bugs/?search={self.bug1.display_id}'))), 1)
 
     def test_activity_notifications_and_single_email(self):

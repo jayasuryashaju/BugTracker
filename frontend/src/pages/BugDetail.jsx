@@ -1,18 +1,16 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import {
-  AlertTriangle, Clock, Download, FileText, Link2, MessageSquare, Pencil, Reply, Send, Trash2, Upload, X, Activity as ActivityIcon, Paperclip,
+  AlertTriangle, Clock, Link2, MessageSquare, Pencil, Reply, Send, Trash2, X, Activity as ActivityIcon, Paperclip,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api from '../api';
 import { useAuth } from '../context/AuthContext';
 import { useBugEvents } from '../context/NotificationsContext';
-import { errorMessage, fileUrl, formatDate, fullName, isOverdue, PRIORITIES, STATUSES, timeAgo, unwrap } from '../lib/utils';
+import { errorMessage, formatDate, fullName, isOverdue, PRIORITIES, STATUSES, timeAgo, unwrap } from '../lib/utils';
 import MarkdownEditor, { Markdown } from '../components/MarkdownEditor';
+import { MediaPicker, AttachmentGallery } from '../components/Media';
 import { Avatar, ConfirmDialog, EmptyState, PageLoader, PriorityBadge, RoleBadge, StatusBadge } from '../components/ui';
-
-const isImage = (name) => /\.(jpe?g|png|webp|gif|bmp|avif)$/i.test(name);
-const isVideo = (name) => /\.(mp4|webm|ogg|mov)$/i.test(name);
 
 const Card = ({ icon: Icon, title, extra, children }) => (
   <section className="card">
@@ -105,10 +103,8 @@ const BugDetail = () => {
   const [note, setNote] = useState('');
   const [linkQuery, setLinkQuery] = useState('');
   const [linkResults, setLinkResults] = useState([]);
-  const [lightbox, setLightbox] = useState(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
-  const [uploading, setUploading] = useState(false);
-  const fileInput = useRef(null);
+  const [uploads, setUploads] = useState([]);
 
   const role = user?.profile?.role;
   const isManager = role === 'Admin' || role === 'Manager' || user?.is_superuser;
@@ -136,13 +132,6 @@ const BugDetail = () => {
       if (t.status === 'fulfilled') setAllTags(unwrap(t.value));
     });
   }, []);
-
-  useEffect(() => {
-    if (!lightbox) return undefined;
-    const onKey = (e) => { if (e.key === 'Escape') setLightbox(null); };
-    document.addEventListener('keydown', onKey);
-    return () => document.removeEventListener('keydown', onKey);
-  }, [lightbox]);
 
   useEffect(() => { if (bug) document.title = `${bug.display_id} ${bug.title} · BugTracker Pro`; }, [bug?.display_id, bug?.title]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -207,20 +196,27 @@ const BugDetail = () => {
 
   const setLinks = async (ids) => { const ok = await patch({ linked_bug_ids: ids }); if (ok) { setLinkQuery(''); setLinkResults([]); } };
 
-  const upload = async (list) => {
-    setUploading(true);
-    for (const file of Array.from(list)) {
+  // Files start uploading as soon as they are picked, dropped or pasted; progress is shown per file.
+  const upload = async (added) => {
+    const batch = added.map((file) => ({ file, id: `${file.name}-${file.size}-${Math.random()}`, progress: 0 }));
+    setUploads((u) => [...u, ...batch]);
+    const patchItem = (itemId, changes) => setUploads((u) => u.map((x) => (x.id === itemId ? { ...x, ...changes } : x)));
+    await Promise.all(batch.map(async (item) => {
       const body = new FormData();
       body.append('bug', id);
-      body.append('file', file);
-      try { await api.post('attachments/', body); } catch (err) { toast.error(`${file.name}: ${errorMessage(err)}`); }
-    }
-    setUploading(false);
+      body.append('file', item.file);
+      try {
+        await api.post('attachments/', body, { onUploadProgress: (e) => patchItem(item.id, { progress: Math.round((e.loaded / (e.total || e.loaded || 1)) * 100) }) });
+        setUploads((u) => u.filter((x) => x.id !== item.id));
+      } catch (err) {
+        patchItem(item.id, { error: errorMessage(err, 'Upload failed'), progress: null });
+      }
+    }));
     load();
   };
 
-  const removeAttachment = async (attId) => {
-    try { await api.delete(`attachments/${attId}/`); load(); } catch (err) { toast.error(errorMessage(err)); }
+  const removeAttachment = async (att) => {
+    try { await api.delete(`attachments/${att.id}/`); load(); } catch (err) { toast.error(errorMessage(err)); }
   };
 
   const removeBug = async () => {
@@ -278,27 +274,14 @@ const BugDetail = () => {
             )}
           </Card>
 
-          <Card icon={Paperclip} title={`Attachments${bug.attachments.length ? ` (${bug.attachments.length})` : ''}`}
-            extra={<><button className="btn btn--secondary btn--sm" disabled={uploading} onClick={() => fileInput.current.click()}><Upload size={13} /> {uploading ? 'Uploading…' : 'Add files'}</button><input ref={fileInput} hidden multiple type="file" onChange={(e) => { upload(e.target.files); e.target.value = ''; }} /></>}>
-            {bug.attachments.length === 0 ? <p className="muted">No attachments.</p> : (
-              <div className="stack" style={{ gap: 10 }}>
-                {bug.attachments.map((a) => {
-                  const url = fileUrl(a.file);
-                  const name = a.filename;
-                  return (
-                    <div key={a.id}>
-                      <div className="attachment">
-                        {isImage(name) ? <img className="thumb" src={url} alt="" onClick={() => setLightbox(url)} /> : <FileText size={22} />}
-                        <div className="grow"><div className="truncate" style={{ fontWeight: 550 }}>{name}</div><div className="muted" style={{ fontSize: 12.5 }}>{fullName(a.uploaded_by)} · {timeAgo(a.uploaded_at)}</div></div>
-                        <a className="btn btn--ghost btn--icon btn--sm" href={url} download aria-label={`Download ${name}`}><Download size={15} /></a>
-                        {(isManager || a.uploaded_by?.id === user.id) && <button className="btn btn--ghost btn--icon btn--sm" aria-label={`Remove ${name}`} onClick={() => removeAttachment(a.id)}><Trash2 size={15} /></button>}
-                      </div>
-                      {isVideo(name) && <video controls src={url} style={{ width: '100%', marginTop: 8, borderRadius: 'var(--radius)', background: '#000' }} />}
-                    </div>
-                  );
-                })}
-              </div>
-            )}
+          <Card icon={Paperclip} title={`Screenshots & recordings${bug.attachments.length ? ` (${bug.attachments.length})` : ''}`}>
+            <div className="stack" style={{ gap: 14 }}>
+              {bug.attachments.length > 0 && (
+                <AttachmentGallery attachments={bug.attachments} onDelete={removeAttachment}
+                  canDelete={(a) => isManager || a.uploaded_by?.id === user.id} />
+              )}
+              <MediaPicker compact items={uploads} onAdd={upload} onRemove={(i) => setUploads((u) => u.filter((_, j) => j !== i))} />
+            </div>
           </Card>
 
           <Card icon={MessageSquare} title={`Discussion${commentCount ? ` (${commentCount})` : ''}`}>
@@ -421,7 +404,6 @@ const BugDetail = () => {
         </aside>
       </div>
 
-      {lightbox && <div className="lightbox" role="dialog" aria-label="Image preview" onClick={() => setLightbox(null)}><img src={lightbox} alt="Attachment preview" onClick={(e) => e.stopPropagation()} /></div>}
       {confirmDelete && <ConfirmDialog danger title="Delete this bug?" message={`${bug.display_id} and all of its comments, attachments and history will be permanently deleted.`} confirmLabel="Delete bug" onConfirm={removeBug} onCancel={() => setConfirmDelete(false)} />}
     </div>
   );
