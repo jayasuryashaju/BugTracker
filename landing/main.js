@@ -1,51 +1,81 @@
-document.addEventListener('DOMContentLoaded', () => {
-  // Theme Toggle Logic
-  const themeToggleBtn = document.getElementById('theme-toggle');
-  
-  // Check for saved theme preference or OS preference
-  const savedTheme = localStorage.getItem('theme');
-  const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-  
-  if (savedTheme) {
-    document.documentElement.setAttribute('data-theme', savedTheme);
-  } else if (!prefersDark) {
-    document.documentElement.setAttribute('data-theme', 'light');
+(function () {
+  var root = document.documentElement;
+  var themeBtn = document.getElementById('themeBtn');
+
+  /* ---------- theme: swap screenshots to match ---------- */
+  function applyShots() {
+    var theme = root.getAttribute('data-theme') === 'dark' ? 'dark' : 'light';
+    document.querySelectorAll('img[data-shot]').forEach(function (img) {
+      var next = 'assets/shots/' + img.getAttribute('data-shot') + '-' + theme + '.webp';
+      if (img.getAttribute('src') !== next) img.setAttribute('src', next);
+    });
   }
-
-  // Update Icon
-  const updateIcon = () => {
-    const isLight = document.documentElement.getAttribute('data-theme') === 'light';
-    themeToggleBtn.innerHTML = isLight 
-      ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>'
-      : '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line><line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line></svg>';
-  };
-  updateIcon();
-
-  themeToggleBtn.addEventListener('click', () => {
-    let currentTheme = document.documentElement.getAttribute('data-theme');
-    let newTheme = currentTheme === 'light' ? 'dark' : 'light';
-    
-    document.documentElement.setAttribute('data-theme', newTheme);
-    localStorage.setItem('theme', newTheme);
-    updateIcon();
+  applyShots();
+  themeBtn.addEventListener('click', function () {
+    var next = root.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+    root.setAttribute('data-theme', next);
+    try { localStorage.setItem('theme', next); } catch (e) { /* storage unavailable */ }
+    applyShots();
   });
 
-  // Intersection Observer for Scroll Animations
-  const observerOptions = {
-    threshold: 0.1,
-    rootMargin: "0px 0px -50px 0px"
-  };
+  /* ---------- nav: border on scroll, mobile menu ---------- */
+  var nav = document.getElementById('nav');
+  var onScroll = function () { nav.classList.toggle('is-scrolled', window.scrollY > 8); };
+  onScroll();
+  window.addEventListener('scroll', onScroll, { passive: true });
 
-  const observer = new IntersectionObserver((entries) => {
-    entries.forEach(entry => {
-      if (entry.isIntersecting) {
-        entry.target.classList.add('active');
-        // Optional: Stop observing once animated
-        // observer.unobserve(entry.target);
-      }
+  var burger = document.getElementById('burger');
+  var links = document.getElementById('navLinks');
+  function setMenu(open) {
+    links.classList.toggle('open', open);
+    burger.setAttribute('aria-expanded', String(open));
+  }
+  burger.addEventListener('click', function () { setMenu(!links.classList.contains('open')); });
+  links.addEventListener('click', function (e) { if (e.target.tagName === 'A') setMenu(false); });
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape') setMenu(false); });
+
+  /* ---------- product tabs (WAI-ARIA tabs pattern) ---------- */
+  document.querySelectorAll('[data-tabs]').forEach(function (group) {
+    var tabs = Array.prototype.slice.call(group.querySelectorAll('[role="tab"]'));
+    function select(tab, focus) {
+      tabs.forEach(function (t) {
+        var on = t === tab;
+        t.setAttribute('aria-selected', String(on));
+        t.tabIndex = on ? 0 : -1;
+        var panel = document.getElementById(t.getAttribute('aria-controls'));
+        panel.hidden = !on;
+        panel.classList.toggle('is-active', on);
+      });
+      if (focus) tab.focus();
+    }
+    tabs.forEach(function (tab, i) {
+      tab.addEventListener('click', function () { select(tab); });
+      tab.addEventListener('keydown', function (e) {
+        var step = 0;
+        if (e.key === 'ArrowDown' || e.key === 'ArrowRight') step = 1;
+        else if (e.key === 'ArrowUp' || e.key === 'ArrowLeft') step = -1;
+        else if (e.key === 'Home') { e.preventDefault(); select(tabs[0], true); return; }
+        else if (e.key === 'End') { e.preventDefault(); select(tabs[tabs.length - 1], true); return; }
+        if (!step) return;
+        e.preventDefault();
+        select(tabs[(i + step + tabs.length) % tabs.length], true);
+      });
     });
-  }, observerOptions);
+  });
 
-  const revealElements = document.querySelectorAll('.reveal');
-  revealElements.forEach(el => observer.observe(el));
-});
+  /* ---------- scroll reveal ---------- */
+  var items = document.querySelectorAll('.reveal');
+  if (!('IntersectionObserver' in window)) {
+    items.forEach(function (el) { el.classList.add('in'); });
+    return;
+  }
+  var io = new IntersectionObserver(function (entries) {
+    entries.forEach(function (entry) {
+      if (entry.isIntersecting) { entry.target.classList.add('in'); io.unobserve(entry.target); }
+    });
+  }, { threshold: 0.12, rootMargin: '0px 0px -40px 0px' });
+  items.forEach(function (el, i) {
+    el.style.transitionDelay = (i % 4) * 60 + 'ms';
+    io.observe(el);
+  });
+})();

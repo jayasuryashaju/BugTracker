@@ -105,6 +105,7 @@ const BugDetail = () => {
   const [linkResults, setLinkResults] = useState([]);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [uploads, setUploads] = useState([]);
+  const [tagPicker, setTagPicker] = useState(false);
   const titleRef = useRef(null);
 
   const role = user?.profile?.role;
@@ -350,14 +351,17 @@ const BugDetail = () => {
             </Prop>
             <Prop label="Tags">
               <div className="row row--wrap" style={{ gap: 6 }}>
-                {allTags.length === 0 && bug.tags_detail.length === 0 && <span className="muted">None</span>}
-                {allTags.map((t) => {
+                {bug.tags_detail.length === 0 && !tagPicker && <span className="muted">None</span>}
+                {(tagPicker ? allTags : bug.tags_detail).map((t) => {
                   const on = bug.tags_detail.some((x) => x.id === t.id);
                   return (
-                    <button key={t.id} type="button" className="tag" aria-pressed={on} disabled={!canEdit} style={{ '--tag': t.color, cursor: canEdit ? 'pointer' : 'default', opacity: on ? 1 : 0.45 }}
+                    <button key={t.id} type="button" className="tag" aria-pressed={on} disabled={!canEdit || !tagPicker} style={{ '--tag': t.color, cursor: tagPicker ? 'pointer' : 'default', opacity: on ? 1 : 0.5 }}
                       onClick={() => patch({ tag_ids: on ? bug.tags_detail.filter((x) => x.id !== t.id).map((x) => x.id) : [...bug.tags_detail.map((x) => x.id), t.id] })}>{t.name}</button>
                   );
                 })}
+                {canEdit && allTags.length > 0 && (
+                  <button type="button" className="btn btn--ghost btn--sm" onClick={() => setTagPicker((v) => !v)}>{tagPicker ? 'Done' : bug.tags_detail.length ? 'Edit' : '+ Add tag'}</button>
+                )}
               </div>
             </Prop>
             <Prop label="Reporter"><span className="person"><Avatar user={bug.created_by} size="sm" />{fullName(bug.created_by)}</span></Prop>

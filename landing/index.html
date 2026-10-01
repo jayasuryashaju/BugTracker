@@ -2,162 +2,323 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta name="description" content="BugTracker Pro — The modern, real-time issue tracking platform built for high-velocity engineering teams. Track bugs, manage projects, and ship faster." />
-  <meta name="theme-color" content="#6366f1" />
-  <title>BugTracker Pro — Modern Issue Tracking for Engineering Teams</title>
-  
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>BugTracker Pro — Find it. Fix it. Ship it.</title>
+  <meta name="description" content="BugTracker Pro is a real-time bug tracker for engineering teams: dashboard, board, rich bug reports with screenshots and screen recordings, roles, notifications and a full mobile experience." />
+  <meta name="theme-color" content="#4f46e5" />
+  <meta name="color-scheme" content="light dark" />
+  <meta property="og:title" content="BugTracker Pro — Find it. Fix it. Ship it." />
+  <meta property="og:description" content="Real-time bug tracking with a dashboard, board, media-rich reports and a full mobile experience." />
+  <meta property="og:image" content="assets/shots/dashboard-light.webp" />
+  <link rel="icon" type="image/svg+xml" href="favicon.svg" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500&display=swap" />
   <link rel="stylesheet" href="styles.css" />
+  <script>
+    // Choose the theme before first paint (saved choice, else the OS setting).
+    (function () {
+      document.documentElement.classList.add('js');
+      var t; try { t = localStorage.getItem('theme'); } catch (e) {}
+      if (t !== 'light' && t !== 'dark') t = matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+      document.documentElement.setAttribute('data-theme', t);
+    })();
+  </script>
 </head>
 <body>
-  
-  <!-- NAVBAR -->
-  <nav>
-    <a href="#" class="nav-logo brand-font">
-      <div class="nav-logo-icon">
-        <svg width="20" height="20" viewBox="0 0 64 64" fill="none" stroke="white" stroke-width="3.5" stroke-linejoin="round" aria-hidden="true"><path d="M32 11 47 18v15c0 9.5-6.4 17-15 20-8.6-3-15-10.5-15-20V18Z"/><circle cx="32" cy="31" r="5" fill="white" stroke="none"/></svg>
-      </div>
-      BugTracker Pro
-    </a>
-    <ul class="nav-links">
-      <li><a href="#features">Features</a></li>
-      <li><a href="#workflow">Workflow</a></li>
-    </ul>
-    <div class="nav-cta">
-      <button id="theme-toggle" class="theme-toggle" aria-label="Toggle theme">
-        <!-- SVG injected by JS -->
-      </button>
-      <a href="https://bugtracker-frontend-x5my.onrender.com/login" class="btn btn-ghost">Sign In</a>
-      <a href="https://bugtracker-frontend-x5my.onrender.com/login" class="btn btn-primary">Get Started</a>
-    </div>
-  </nav>
+  <a class="skip" href="#main">Skip to content</a>
 
-  <!-- HERO SECTION -->
-  <section class="hero">
-    <div class="hero-bg-grid"></div>
-    <div class="floating-element blob-1"></div>
-    <div class="floating-element blob-2"></div>
-
-    <div class="hero-content reveal">
-      <div class="hero-badge">
-        <div class="hero-badge-dot"></div>
-        Real-time issue tracking for engineering teams
-      </div>
-      <h1 class="brand-font">Track Bugs.<br/><span class="gradient-text">Ship Faster.</span></h1>
-      <p class="hero-sub">Log bugs, assign owners, move work across a board and see what's slipping — with every change reflected for your whole team the moment it happens.</p>
-      
-      <a href="https://bugtracker-frontend-x5my.onrender.com/login" class="btn btn-primary" style="font-size: 1.1rem; padding: 14px 32px; border-radius: 99px;">
-        Get started
-        <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M5 12h14m-7-7 7 7-7 7"/></svg>
+  <!-- ============ NAV ============ -->
+  <header class="nav" id="nav">
+    <div class="wrap nav__in">
+      <a href="#top" class="brand" aria-label="BugTracker Pro home">
+        <svg width="30" height="30" viewBox="0 0 64 64" fill="none" aria-hidden="true"><rect width="64" height="64" rx="15" fill="#4f46e5"/><path d="M32 11 47 18v15c0 9.5-6.4 17-15 20-8.6-3-15-10.5-15-20V18Z" stroke="#fff" stroke-width="3" stroke-linejoin="round"/><circle cx="32" cy="31" r="7" stroke="#c7c3fb" stroke-width="2.5"/><circle cx="32" cy="31" r="2.5" fill="#fff"/></svg>
+        <span>BugTracker <b>Pro</b></span>
       </a>
+      <nav class="nav__links" id="navLinks" aria-label="Sections">
+        <a href="#product">Product</a>
+        <a href="#reports">Bug reports</a>
+        <a href="#mobile">Mobile</a>
+        <a href="#roles">Teams</a>
+        <a href="#faq">FAQ</a>
+      </nav>
+      <div class="nav__cta">
+        <button class="icon-btn" id="themeBtn" aria-label="Toggle dark mode"><svg class="i-moon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg><svg class="i-sun" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg></button>
+        <a class="btn btn--ghost nav__signin" href="https://bugtracker-frontend-x5my.onrender.com/login">Sign in</a>
+        <a class="btn btn--primary" href="https://bugtracker-frontend-x5my.onrender.com/login">Get started</a>
+        <button class="icon-btn nav__burger" id="burger" aria-label="Open menu" aria-expanded="false" aria-controls="navLinks"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button>
+      </div>
     </div>
+  </header>
 
-    <!-- Generated Dashboard Mockup -->
-    <div class="hero-mockup-wrapper reveal delay-2">
-      <img src="assets/hero_mockup.jpg" alt="The BugTracker Pro dashboard showing open work, a created-versus-resolved chart and recent bugs" class="hero-mockup" />
-    </div>
-  </section>
-
-  <!-- FEATURES (BENTO BOX) -->
-  <section id="features" class="section">
-    <div class="section-header reveal">
-      <h2 class="section-title brand-font">Everything you need. <br/><span class="gradient-text">Nothing you don't.</span></h2>
-      <p class="section-sub">A focused tracker that covers the whole loop from report to resolution, without the clutter.</p>
-    </div>
-
-    <div class="bento-grid">
-      
-      <div class="bento-card bento-large glass-panel reveal">
-        <div class="bento-icon">
-          <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+  <main id="main">
+    <!-- ============ HERO ============ -->
+    <section class="hero" id="top">
+      <div class="hero__bg" aria-hidden="true"></div>
+      <div class="wrap hero__copy">
+        <p class="eyebrow reveal"><span class="pulse"></span> Real-time issue tracking</p>
+        <h1 class="reveal">Find it. Fix it.<br /><span class="grad">Ship it.</span></h1>
+        <p class="lead reveal">Log bugs with screenshots and screen recordings, hand them to the right person, and watch the board move — for your whole team, the moment it happens. On your desk and in your pocket.</p>
+        <div class="hero__ctas reveal">
+          <a class="btn btn--primary btn--lg" href="https://bugtracker-frontend-x5my.onrender.com/login">Get started <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></a>
+          <a class="btn btn--ghost btn--lg" href="#product">See how it works</a>
         </div>
-        <h3 class="brand-font">Real-Time Sync</h3>
-        <p>Built on WebSockets: assignments, comments and status changes show up for your whole team instantly, with notifications for the things that involve you. No refreshing to see whether QA verified your fix.</p>
       </div>
 
-      <div class="bento-card bento-small glass-panel reveal delay-1">
-        <div class="bento-icon">
-          <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4m0-4h.01"/></svg>
+      <div class="wrap hero__stage reveal">
+        <div class="float float--a" aria-hidden="true">
+          <span class="float__dot float__dot--blue"></span>
+          <div><b>CW-1 moved to In Progress</b><small>Liam Chen · just now</small></div>
         </div>
-        <h3 class="brand-font">Clear Ownership</h3>
-        <p>Admin, manager, tester and developer roles keep everyone focused on the bugs that are theirs.</p>
-      </div>
-
-      <div class="bento-card bento-small glass-panel reveal delay-2">
-        <div class="bento-icon">
-          <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
+        <div class="float float--b" aria-hidden="true">
+          <span class="float__dot float__dot--red"></span>
+          <div><b>Critical bug assigned to you</b><small>Checkout fails with 3-D Secure…</small></div>
         </div>
-        <h3 class="brand-font">Kanban Boards</h3>
-        <p>Drag bugs through Open, In Progress, Resolved and Closed, by project or just your own.</p>
+        <figure class="phone phone--hero" aria-hidden="false"><img data-shot="m-dashboard" src="assets/shots/m-dashboard-light.webp" width="520" height="1125" alt="BugTracker Pro dashboard on a phone." /></figure>
+        <figure class="frame frame--hero">
+          <div class="frame__bar" aria-hidden="true"><i></i><i></i><i></i><span>bugtracker.app / dashboard</span></div>
+          <img data-shot="dashboard" src="assets/shots/dashboard-light.webp" width="1600" height="1000" alt="The BugTracker Pro dashboard: open work, overdue and unassigned counts, a created-versus-resolved chart, status and priority breakdowns, and recently updated bugs." fetchpriority="high" />
+        </figure>
       </div>
+    </section>
 
-      <div class="bento-card bento-large glass-panel reveal delay-3">
-        <div class="bento-icon">
-          <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M3 3v18h18"/><path d="m19 9-5 5-4-4-3 3"/></svg>
-        </div>
-        <h3 class="brand-font">Deep Analytics</h3>
-        <p>See bugs created versus resolved over time, the priority mix, what's overdue and what has no owner yet — on a dashboard that updates as your team works.</p>
-      </div>
+    <!-- ============ FACTS ============ -->
+    <section class="facts wrap" aria-label="At a glance">
+      <div class="fact reveal"><b>Live</b><span>WebSocket updates — no refreshing</span></div>
+      <div class="fact reveal"><b>100 MB</b><span>per screenshot or screen recording</span></div>
+      <div class="fact reveal"><b>4 roles</b><span>Admin, Manager, Tester, Developer</span></div>
+      <div class="fact reveal"><b>Light &amp; dark</b><span>desktop and phone, installed nowhere</span></div>
+    </section>
 
-    </div>
-  </section>
+    <!-- ============ PRODUCT TABS ============ -->
+    <section class="section" id="product">
+      <div class="wrap">
+        <header class="section__head reveal">
+          <p class="eyebrow">The product</p>
+          <h2>Everything from “it’s broken” to “it’s fixed”, on one screen.</h2>
+          <p class="lead">A focused tracker that covers the whole loop. Pick a view:</p>
+        </header>
 
-  <!-- WORKFLOW -->
-  <section id="workflow" class="section">
-    <div class="section-header reveal">
-      <h2 class="section-title brand-font">The perfect workflow.</h2>
-    </div>
-    
-    <div class="workflow-grid">
-      <div class="workflow-step reveal">
-        <div class="step-number brand-font">1</div>
-        <h4 class="brand-font">Capture</h4>
-        <p>Log bugs with markdown descriptions, repro steps, screenshots and screen recordings.</p>
-      </div>
-      <div class="workflow-step reveal delay-1">
-        <div class="step-number brand-font">2</div>
-        <h4 class="brand-font">Triage</h4>
-        <p>Set priority and due dates, tag and link related issues, and route each bug to its owner.</p>
-      </div>
-      <div class="workflow-step reveal delay-2">
-        <div class="step-number brand-font">3</div>
-        <h4 class="brand-font">Resolve</h4>
-        <p>Discuss in threaded comments, log time, and keep everyone in the loop automatically.</p>
-      </div>
-      <div class="workflow-step reveal delay-3">
-        <div class="step-number brand-font">4</div>
-        <h4 class="brand-font">Ship</h4>
-        <p>Close out bugs with a full audit trail and watch the overdue count fall.</p>
-      </div>
-    </div>
-  </section>
-
-  <!-- CTA / FOOTER -->
-  <footer>
-    <div class="footer-grid">
-      <div class="footer-col">
-        <a href="#" class="nav-logo brand-font" style="margin-bottom: 20px;">
-          <div class="nav-logo-icon" style="width: 28px; height: 28px;">
-            <svg width="16" height="16" viewBox="0 0 64 64" fill="none" stroke="white" stroke-width="3.5" stroke-linejoin="round" aria-hidden="true"><path d="M32 11 47 18v15c0 9.5-6.4 17-15 20-8.6-3-15-10.5-15-20V18Z"/><circle cx="32" cy="31" r="5" fill="white" stroke="none"/></svg>
+        <div class="tabs reveal" data-tabs>
+          <div class="tabs__list" role="tablist" aria-label="Product views">
+            <button role="tab" aria-selected="true" aria-controls="p-dashboard" id="t-dashboard" data-shot-name="dashboard">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/></svg>
+              <span><b>Dashboard</b><small>See what’s slipping</small></span>
+            </button>
+            <button role="tab" aria-selected="false" aria-controls="p-board" id="t-board" data-shot-name="board" tabindex="-1">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 7v10M15 7v6"/></svg>
+              <span><b>Board</b><small>Drag work forward</small></span>
+            </button>
+            <button role="tab" aria-selected="false" aria-controls="p-bugs" id="t-bugs" data-shot-name="bugs" tabindex="-1">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M6 12h12M10 18h4"/></svg>
+              <span><b>Filters &amp; search</b><small>Find anything fast</small></span>
+            </button>
+            <button role="tab" aria-selected="false" aria-controls="p-projects" id="t-projects" data-shot-name="projects" tabindex="-1">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
+              <span><b>Projects</b><small>Group by product</small></span>
+            </button>
+            <button role="tab" aria-selected="false" aria-controls="p-team" id="t-team" data-shot-name="team" tabindex="-1">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0M16 4.5a3.5 3.5 0 0 1 0 7M18 14a6 6 0 0 1 3.5 6"/></svg>
+              <span><b>Team</b><small>Invite &amp; manage roles</small></span>
+            </button>
           </div>
-          BugTracker Pro
-        </a>
-        <p style="color: var(--text-secondary); font-size: 0.9rem; max-width: 250px;">
-          Real-time issue tracking for engineering teams.
-        </p>
+
+          <div class="tabs__panels">
+            <div role="tabpanel" id="p-dashboard" aria-labelledby="t-dashboard" class="panel is-active">
+              <p class="panel__text"><b>Know the state of play in five seconds.</b> Open work, overdue and unassigned counts, created versus resolved over the last 14 days, and the status and priority mix — all live.</p>
+              <figure class="frame"><div class="frame__bar" aria-hidden="true"><i></i><i></i><i></i><span>Dashboard</span></div><img loading="lazy" data-shot="dashboard" src="assets/shots/dashboard-light.webp" width="1600" height="1000" alt="Dashboard with KPI cards, created-versus-resolved line chart, status bar and priority bars." /></figure>
+            </div>
+            <div role="tabpanel" id="p-board" aria-labelledby="t-board" class="panel" hidden>
+              <p class="panel__text"><b>Move work with your hands.</b> Drag cards between Open, In Progress, Resolved and Closed. Every move is logged, and the people involved are notified. Filter by project or just your own bugs.</p>
+              <figure class="frame"><div class="frame__bar" aria-hidden="true"><i></i><i></i><i></i><span>Board</span></div><img loading="lazy" data-shot="board" src="assets/shots/board-light.webp" width="1600" height="1000" alt="Kanban board with four columns of bug cards showing priority, tags, due dates and assignees." /></figure>
+            </div>
+            <div role="tabpanel" id="p-bugs" aria-labelledby="t-bugs" class="panel" hidden>
+              <p class="panel__text"><b>Filter by anything, save it, export it.</b> Status, priority, project, assignee, overdue, unassigned — synced to the URL so views are shareable. Save your favourite filters and export the result to CSV.</p>
+              <figure class="frame"><div class="frame__bar" aria-hidden="true"><i></i><i></i><i></i><span>All bugs</span></div><img loading="lazy" data-shot="bugs" src="assets/shots/bugs-light.webp" width="1600" height="1000" alt="Bug list filtered to high priority with search, status, project and assignee filters." /></figure>
+            </div>
+            <div role="tabpanel" id="p-projects" aria-labelledby="t-projects" class="panel" hidden>
+              <p class="panel__text"><b>One home per product.</b> Projects keep bugs organised with their own prefix (CW-1, MA-4…), members and open-bug counts. Developers only see the projects they belong to.</p>
+              <figure class="frame"><div class="frame__bar" aria-hidden="true"><i></i><i></i><i></i><span>Projects</span></div><img loading="lazy" data-shot="projects" src="assets/shots/projects-light.webp" width="1600" height="1000" alt="Project cards with member avatars and open versus total bug counts." /></figure>
+            </div>
+            <div role="tabpanel" id="p-team" aria-labelledby="t-team" class="panel" hidden>
+              <p class="panel__text"><b>Bring your team in.</b> Invite colleagues by email with a role, change roles in one click, and revoke invites. Everyone in the organization sees only that organization’s data.</p>
+              <figure class="frame"><div class="frame__bar" aria-hidden="true"><i></i><i></i><i></i><span>Team</span></div><img loading="lazy" data-shot="team" src="assets/shots/team-light.webp" width="1600" height="1000" alt="Team page with an invite form and a member list with role selectors." /></figure>
+            </div>
+          </div>
+        </div>
       </div>
-      <div class="footer-col">
-        <h5 class="brand-font">Platform</h5>
-        <a href="https://bugtracker-frontend-x5my.onrender.com/login">Sign In</a>
-        <a href="https://bugtracker-frontend-x5my.onrender.com/login">Get Started</a>
-        <a href="https://bugtracker-frontend-x5my.onrender.com/">Dashboard</a>
+    </section>
+
+    <!-- ============ BENTO ============ -->
+    <section class="section section--tint" id="features">
+      <div class="wrap">
+        <header class="section__head reveal">
+          <p class="eyebrow">Built for the way bugs actually move</p>
+          <h2>Small things that save a standup.</h2>
+        </header>
+        <div class="bento">
+          <article class="card card--wide reveal">
+            <div class="card__text">
+              <span class="chip">Command palette</span>
+              <h3>Jump anywhere with <kbd>Ctrl</kbd> <kbd>K</kbd></h3>
+              <p>Search bugs by title or ID, projects and teammates from any page, then hit Enter. Keyboard first, mouse optional.</p>
+            </div>
+            <figure class="frame frame--crop"><img loading="lazy" data-shot="palette" src="assets/shots/palette-light.webp" width="1600" height="1000" alt="The command palette open over the dashboard, showing matching bugs and projects." /></figure>
+          </article>
+
+          <article class="card reveal">
+            <span class="icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 3 14h9l-1 8 10-12h-9z"/></svg></span>
+            <h3>Live, not refreshed</h3>
+            <p>Assignments, comments and status changes arrive over WebSockets. Notifications pop up instantly and the bell keeps count.</p>
+          </article>
+
+          <article class="card reveal">
+            <span class="icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></span>
+            <h3>Time &amp; deadlines</h3>
+            <p>Due dates with overdue warnings, and time tracking on every bug so effort is visible, not guessed.</p>
+          </article>
+
+          <article class="card reveal">
+            <span class="icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7"/><path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7"/></svg></span>
+            <h3>Linked issues</h3>
+            <p>Connect duplicates and related bugs, search by title or ID, and jump between them in one click.</p>
+          </article>
+
+          <article class="card reveal">
+            <span class="icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16v12H5.2L4 17.2z"/><path d="M8 9h8M8 12h5"/></svg></span>
+            <h3>Threaded discussion</h3>
+            <p>Markdown comments with replies and a live preview. Authors can edit or delete; the people on the bug are notified.</p>
+          </article>
+
+          <article class="card reveal">
+            <span class="icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 4 6v6c0 5 3.4 8 8 9 4.6-1 8-4 8-9V6z"/><path d="m9 12 2 2 4-4"/></svg></span>
+            <h3>Audit trail</h3>
+            <p>Every status, priority, assignee and due-date change is recorded with who and when.</p>
+          </article>
+
+          <article class="card reveal">
+            <span class="icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12M7 10l5 5 5-5M4 20h16"/></svg></span>
+            <h3>Saved filters &amp; CSV export</h3>
+            <p>Save the views you use every day and export any filtered list to CSV for reports and spreadsheets.</p>
+          </article>
+        </div>
       </div>
-    </div>
-    <div class="footer-bottom">
-      <p>&copy; 2026 BugTracker Pro. All rights reserved.</p>
-      <div style="display: flex; gap: 16px;">
+    </section>
+
+    <!-- ============ BUG REPORTS ============ -->
+    <section class="section" id="reports">
+      <div class="wrap reports">
+        <div class="reports__copy reveal">
+          <p class="eyebrow">Rich bug reports</p>
+          <h2>Show the bug, don’t describe it.</h2>
+          <p class="lead">Attach as many screenshots and screen recordings as you need — drop them, browse for them, or paste straight from your clipboard.</p>
+          <ul class="ticks">
+            <li><b>Many files at once.</b> Previews and per-file progress while they upload.</li>
+            <li><b>A real gallery.</b> Click any image or video to open a viewer; arrow keys move between files.</li>
+            <li><b>Markdown everywhere.</b> Description, repro steps and comments, with a live preview.</li>
+            <li><b>Everything in one place.</b> Status, assignee, tags, time and linked bugs sit next to the story.</li>
+          </ul>
+        </div>
+        <figure class="frame frame--tall reveal"><div class="frame__bar" aria-hidden="true"><i></i><i></i><i></i><span>CW-1 · Checkout fails with 3-D Secure on Safari 17</span></div><img loading="lazy" data-shot="detail" src="assets/shots/detail-light.webp" width="1600" height="1311" alt="A bug page with a rendered description, steps to reproduce, a gallery of three screenshots and a screen recording, and a properties panel with status, priority, assignee, tags and time tracking." /></figure>
+      </div>
+    </section>
+
+    <!-- ============ MOBILE ============ -->
+    <section class="section section--dark" id="mobile">
+      <div class="wrap mobile">
+        <div class="mobile__copy reveal">
+          <p class="eyebrow">On your phone</p>
+          <h2>Triage from the train. Fix from the sofa.</h2>
+          <p class="lead">Not a squeezed desktop page — a layout designed for thumbs.</p>
+          <ul class="ticks ticks--light">
+            <li><b>Bottom tab bar</b> with a one-tap “Log a bug”.</li>
+            <li><b>Swipeable board</b> — press and hold a card to move it.</li>
+            <li><b>Bug page, properties first</b>, so changing status takes two taps.</li>
+            <li><b>Bottom-sheet dialogs</b>, big touch targets, and no zoom-on-focus.</li>
+            <li><b>Light and dark</b>, following your phone.</li>
+          </ul>
+        </div>
+        <div class="phones reveal" aria-label="BugTracker Pro on a phone">
+          <figure class="phone phone--1"><img loading="lazy" data-shot="m-dashboard" src="assets/shots/m-dashboard-light.webp" width="520" height="1125" alt="Phone dashboard with four KPI cards and a created-versus-resolved chart." /></figure>
+          <figure class="phone phone--2"><img loading="lazy" data-shot="m-board" src="assets/shots/m-board-light.webp" width="520" height="1125" alt="Phone board showing the Open column with swipeable columns." /></figure>
+          <figure class="phone phone--3"><img loading="lazy" data-shot="m-detail" src="assets/shots/m-detail-light.webp" width="520" height="1125" alt="Phone bug page showing the description and steps to reproduce." /></figure>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ WORKFLOW ============ -->
+    <section class="section" id="workflow">
+      <div class="wrap">
+        <header class="section__head reveal">
+          <p class="eyebrow">The workflow</p>
+          <h2>Four steps. No ceremony.</h2>
+        </header>
+        <ol class="steps">
+          <li class="reveal"><span class="steps__n">1</span><h3>Capture</h3><p>Log it with markdown, repro steps and as many screenshots or recordings as it takes.</p></li>
+          <li class="reveal"><span class="steps__n">2</span><h3>Triage</h3><p>Set priority and a due date, tag it, link related bugs, and assign an owner.</p></li>
+          <li class="reveal"><span class="steps__n">3</span><h3>Resolve</h3><p>Discuss in threads, log time, and drag the card forward. Everyone involved is told.</p></li>
+          <li class="reveal"><span class="steps__n">4</span><h3>Ship</h3><p>Close it with a full audit trail, and watch the overdue count fall.</p></li>
+        </ol>
+      </div>
+    </section>
+
+    <!-- ============ ROLES ============ -->
+    <section class="section section--tint" id="roles">
+      <div class="wrap">
+        <header class="section__head reveal">
+          <p class="eyebrow">For the whole team</p>
+          <h2>Everyone sees what they need — and nothing they shouldn’t.</h2>
+          <p class="lead">Each organization is its own private workspace. Inside it, four roles keep the right people in control.</p>
+        </header>
+        <div class="roles">
+          <article class="role reveal"><span class="role__tag role__tag--admin">Admin</span><h3>Owns the workspace</h3><ul><li>Everything a Manager can do</li><li>Change anyone’s role</li><li>Organization settings</li></ul></article>
+          <article class="role reveal"><span class="role__tag role__tag--manager">Manager</span><h3>Runs the projects</h3><ul><li>Create and edit projects</li><li>Invite people, manage tags</li><li>See every bug</li></ul></article>
+          <article class="role reveal"><span class="role__tag role__tag--tester">Tester</span><h3>Finds and verifies</h3><ul><li>Log and edit any bug</li><li>Attach evidence</li><li>Follow bugs to resolution</li></ul></article>
+          <article class="role reveal"><span class="role__tag role__tag--dev">Developer</span><h3>Fixes what’s theirs</h3><ul><li>Sees bugs assigned to or filed by them</li><li>Updates status, logs time</li><li>Comments and links issues</li></ul></article>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ FAQ ============ -->
+    <section class="section" id="faq">
+      <div class="wrap wrap--narrow">
+        <header class="section__head reveal">
+          <p class="eyebrow">Questions</p>
+          <h2>Good to know</h2>
+        </header>
+        <div class="faq reveal">
+          <details open><summary>How do my teammates join?</summary><p>Invite them from the Team page with a role. When they sign up (or sign in with Microsoft) using the invited email address, they land in your workspace automatically. Colleagues on a company domain who weren’t invited are asked to request an invite.</p></details>
+          <details><summary>What can I attach to a bug?</summary><p>Images, screen recordings, PDFs and logs — up to 100&nbsp;MB per file, as many as you like. Drag them in, browse, or paste a screenshot from your clipboard.</p></details>
+          <details><summary>Does it work on a phone?</summary><p>Yes. The mobile layout has a bottom tab bar, a swipeable board, bottom-sheet dialogs and touch-sized controls. It follows your phone’s light or dark setting.</p></details>
+          <details><summary>Is my data separate from other organizations?</summary><p>Yes. Every bug, project, tag and attachment belongs to one organization and is only visible to its members. Developers additionally see only the bugs assigned to or filed by them.</p></details>
+          <details><summary>Can I sign in with Microsoft?</summary><p>Yes — Microsoft sign-in is supported alongside email and password, including personal Microsoft accounts.</p></details>
+          <details><summary>Can I export my bugs?</summary><p>Any filtered list can be exported to CSV from the All bugs page.</p></details>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ CTA ============ -->
+    <section class="cta">
+      <div class="wrap cta__in reveal">
+        <h2>Give your bugs somewhere to go.</h2>
+        <p>Create your workspace in under a minute.</p>
+        <div class="hero__ctas">
+          <a class="btn btn--light btn--lg" href="https://bugtracker-frontend-x5my.onrender.com/login">Get started</a>
+          <a class="btn btn--outline btn--lg" href="https://bugtracker-frontend-x5my.onrender.com/login">Sign in</a>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <div class="wrap footer__in">
+      <a href="#top" class="brand"><svg width="26" height="26" viewBox="0 0 64 64" fill="none" aria-hidden="true"><rect width="64" height="64" rx="15" fill="#4f46e5"/><path d="M32 11 47 18v15c0 9.5-6.4 17-15 20-8.6-3-15-10.5-15-20V18Z" stroke="#fff" stroke-width="3" stroke-linejoin="round"/><circle cx="32" cy="31" r="2.5" fill="#fff"/></svg><span>BugTracker <b>Pro</b></span></a>
+      <nav class="footer__links" aria-label="Footer">
+        <a href="#product">Product</a><a href="#reports">Bug reports</a><a href="#mobile">Mobile</a><a href="#faq">FAQ</a>
+        <a href="https://bugtracker-frontend-x5my.onrender.com/login">Sign in</a>
         <a href="https://github.com/jayasuryashaju/BugTracker">GitHub</a>
-      </div>
+      </nav>
+      <p class="footer__copy">&copy; 2026 BugTracker Pro</p>
     </div>
   </footer>
 
